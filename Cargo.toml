@@ -6,3 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+async-std = "1.12.0"
+configparser = "3.0.2"
+crossterm = { version = "0.26.1", features = ["event-stream", "futures-core"] }
+futures = "0.3.28"
+futures-timer = "3.0.2"
+tui = "0.19.0"
