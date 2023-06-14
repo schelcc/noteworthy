@@ -1,42 +1,69 @@
-use glob::GlobError;
 use ::glob::{self, glob};
-use rusqlite::{self, Connection, Error, Result};
-use std::{fs, path::{Path, PathBuf}, str::Lines};
+use glob::GlobError;
+use rusqlite::{self, named_params, Connection, Error, Result};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    str::Lines,
+};
 
 #[derive(Debug)]
 enum MetadataType {
     CollectionType,
     DocumentType,
-    ErrorType
+    ErrorType,
 }
 
 #[derive(Debug)]
 struct Metadata {
-    uuid : String,
-    last_modified : String,
-    parent : String,
-    pinned : bool,
-    object_type : MetadataType
+    uuid: String,
+    last_modified: String,
+    parent: String,
+    pinned: bool,
+    object_type: MetadataType,
 }
-
 
 impl MetadataType {
     fn from_str(s: &str) -> MetadataType {
         match s {
             "CollectionType" => MetadataType::CollectionType,
             "DocumentType" => MetadataType::DocumentType,
-            _ => MetadataType::ErrorType
+            _ => MetadataType::ErrorType,
+        }
+    }
+
+    fn to_str(&self) -> &str {
+        match &self {
+            Self::DocumentType => "DocumentType",
+            Self::CollectionType => "CollectionType",
+            Self::ErrorType => "ErrorType",
         }
     }
 }
 
 impl Metadata {
     fn from_file(path: Result<PathBuf, GlobError>) -> Metadata {
-        let file_name = String::from(path.as_ref().unwrap().file_name().unwrap().to_str().unwrap().split(".").nth(0).unwrap());
-        
+        let file_name = String::from(
+            path.as_ref()
+                .unwrap()
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .split(".")
+                .nth(0)
+                .unwrap(),
+        );
+
         let file = fs::read_to_string(path.unwrap()).expect("foo");
 
-        let mut row = Metadata { uuid: file_name, last_modified: String::from(""), parent: String::from(""), pinned: false, object_type: MetadataType::ErrorType };
+        let mut row = Metadata {
+            uuid: file_name,
+            last_modified: String::from(""),
+            parent: String::from(""),
+            pinned: false,
+            object_type: MetadataType::ErrorType,
+        };
 
         for line in file.lines() {
             let trim_line = line.trim();
@@ -47,20 +74,36 @@ impl Metadata {
             match key {
                 None => (),
                 Some(res) => match res {
-                    "lastModified" => { row.last_modified = value.unwrap().to_string() },
-                    "parent" => { row.parent = value.unwrap().to_string().trim().replace(",", "") },
-                    "pinned" => { row.pinned = match value.unwrap().parse::<bool>() {
-                        Err(_) => false,
-                        Ok(res) => res
-                    }},
-                    "type" => {row.object_type = MetadataType::from_str(value.unwrap()
-                        .trim()
-                        .replace("\"", "")
-                        .replace(",", "").as_ref()) }
-                    _ => ()
-                }
+                    "lastModified" => {
+                        row.last_modified = value.unwrap().trim().to_string().replace(",", "")
+                    }
+                    "parent" => {
+                        if value.as_ref().unwrap().to_string().trim().replace(",", "") == "" {
+                            row.parent = String::from("root");
+                        } else {
+                            row.parent = value.unwrap().to_string().trim().replace(",", "");
+                        }
+                    }
+                    "pinned" => {
+                        row.pinned = match value.unwrap().parse::<bool>() {
+                            Err(_) => false,
+                            Ok(res) => res,
+                        }
+                    }
+                    "type" => {
+                        row.object_type = MetadataType::from_str(
+                            value
+                                .unwrap()
+                                .trim()
+                                .replace("\"", "")
+                                .replace(",", "")
+                                .as_ref(),
+                        )
+                    }
+                    _ => (),
+                },
             }
-        };
+        }
 
         row
     }
@@ -69,23 +112,39 @@ impl Metadata {
 pub fn resolve_file_tree() -> Result<()> {
     let db = Connection::open_in_memory()?;
 
-    db.execute("CREATE TABLE objects (
+    match db.execute(
+        "CREATE TABLE objects (
         uuid TEXT,
         last_modified TEXT,
         parent TEXT,
         pinned NUMBER,
-        object_type TEXT)", ())?;
+        object_type TEXT)",
+        (),
+    ) {
+        // TODO: Handle table creation error
+        Err(err) => panic!("[ERR] {:?}", err),
+        Ok(_) => (),
+    };
 
-    // let path = "raw-files";
-    let path_map;
+    let mut stmt = db.prepare(
+        "INSERT INTO objects VALUES (:uuid, :last_modified, :parent, :pinned, :object_type)",
+    )?;
 
     match glob("./raw-files/*.metadata") {
         Err(why) => println!("[ERR] Failed to read glob pattern ({:?})", why),
         Ok(paths) => {
-            path_map = paths.map(|f| Metadata::from_file(f));
-            for item in path_map {
-                println!("{:?}", item)
-            }
+            paths
+                .map(|f| Metadata::from_file(f))
+                .map(|f| {
+                    stmt.execute(named_params! {
+                        ":uuid" : f.uuid,
+                        ":last_modified" : f.last_modified,
+                        ":parent" : f.parent,
+                        ":pinned" : f.pinned,
+                        ":object_type" : f.object_type.to_str(),
+                    })
+                })
+                .for_each(drop);
         }
     };
 
