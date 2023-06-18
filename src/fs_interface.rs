@@ -109,9 +109,7 @@ impl Metadata {
     }
 }
 
-pub fn resolve_file_tree() -> Result<()> {
-    let db = Connection::open_in_memory()?;
-
+pub fn resolve_file_tree(db : &Connection){
     match db.execute(
         "CREATE TABLE objects (
         uuid TEXT,
@@ -128,7 +126,7 @@ pub fn resolve_file_tree() -> Result<()> {
 
     let mut stmt = db.prepare(
         "INSERT INTO objects VALUES (:uuid, :last_modified, :parent, :pinned, :object_type)",
-    )?;
+    ).expect("Fatal error: Failed to insert into table");
 
     match glob("./raw-files/*.metadata") {
         Err(why) => println!("[ERR] Failed to read glob pattern ({:?})", why),
@@ -148,5 +146,7 @@ pub fn resolve_file_tree() -> Result<()> {
         }
     };
 
-    Ok(())
+    // db
+
+    // Ok(())
 }
