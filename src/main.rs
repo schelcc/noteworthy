@@ -4,12 +4,15 @@ pub mod ui;
 
 use fs_interface::resolve_file_tree;
 use rusqlite::Connection;
-use std::{io::{self, Stdout}, time::Duration};
+use std::{
+    io::{self, Stdout},
+    time::Duration,
+};
 
 use tui::{self, backend::CrosstermBackend, Terminal};
 
 use crossterm::{
-    self,
+    self, cursor,
     event::{
         DisableMouseCapture, EnableMouseCapture, Event, EventStream, KeyCode,
         PopKeyboardEnhancementFlags,
@@ -24,19 +27,24 @@ use futures_timer::Delay;
 use crate::ui::file_ui;
 
 fn main() -> Result<(), crate::intern_error::Error> {
-
     // Setup + Initialization
     let mut stdout = io::stdout();
 
     enable_raw_mode()?;
 
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?; // Alternate screen shit
+    execute!(
+        stdout,
+        EnterAlternateScreen,
+        EnableMouseCapture,
+        cursor::Show
+    )?;
 
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let db = Connection::open_in_memory()?;
+    terminal.show_cursor()?;
 
+    let db = Connection::open_in_memory()?;
 
     let conclusion = async_std::task::block_on(render_base(&mut terminal, &db));
 
@@ -55,12 +63,17 @@ fn main() -> Result<(), crate::intern_error::Error> {
     Ok(())
 }
 
-async fn render_base(terminal : &mut Terminal<CrosstermBackend<Stdout>>, db : &Connection) -> Result<(), crate::intern_error::Error> {
+async fn render_base(
+    terminal: &mut Terminal<CrosstermBackend<Stdout>>,
+    db: &Connection,
+) -> Result<(), crate::intern_error::Error> {
     let mut reader = EventStream::new();
 
     resolve_file_tree(&db)?;
 
-    let conclusion : Result<(), crate::intern_error::Error>;
+    let conclusion: Result<(), crate::intern_error::Error>;
+
+    let mut ui = file_ui("/home/schelcc/", "root", &db)?;
 
     match loop {
         let mut key_event = reader.next().fuse();
@@ -73,6 +86,9 @@ async fn render_base(terminal : &mut Terminal<CrosstermBackend<Stdout>>, db : &C
                     Event::Key(event) =>  {
                         match event.code {
                             KeyCode::Esc | KeyCode::Char('q') => break Ok(()),
+                            KeyCode::Up => {ui.cursor_move(ui::CursorDirection::Up);},
+                            KeyCode::Down => {ui.cursor_move(ui::CursorDirection::Down);},
+                            KeyCode::Tab => {ui.toggle_focus();},
                             _ => ()
                         }
                     },
@@ -83,23 +99,14 @@ async fn render_base(terminal : &mut Terminal<CrosstermBackend<Stdout>>, db : &C
             },
             _ = render_event => {
                 terminal.draw(|f| {
-                    match file_ui("/home/schelcc/", "root", &db) {
-                        Err(_) => (),
-                        Ok(ui) => ui.render(f)
-                    }
+                    ui.render(f);
                 })?;
             }
         };
     } {
-        Err(why) => {conclusion = Err(why)},
-        Ok(_) => {conclusion = Ok(())}
+        Err(why) => conclusion = Err(why),
+        Ok(_) => conclusion = Ok(()),
     };
-
-    // Quit stuff
-
-
-
-    // terminal.show_cursor()?;
 
     conclusion
 }

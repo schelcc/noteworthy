@@ -17,6 +17,7 @@ enum MetadataType {
 #[derive(Debug)]
 struct Metadata {
     uuid: String,
+    name: String,
     last_modified: String,
     parent: String,
     pinned: bool,
@@ -59,6 +60,7 @@ impl Metadata {
 
         let mut row = Metadata {
             uuid: file_name,
+            name: String::from(""),
             last_modified: String::from(""),
             parent: String::from(""),
             pinned: false,
@@ -100,6 +102,9 @@ impl Metadata {
                                 .as_ref(),
                         )
                     }
+                    "visibleName" => {
+                        row.name = value.unwrap().to_string().trim().replace(",", "");
+                    }
                     _ => (),
                 },
             }
@@ -109,10 +114,11 @@ impl Metadata {
     }
 }
 
-pub fn resolve_file_tree(db : &Connection) -> Result<(), crate::intern_error::Error> {
+pub fn resolve_file_tree(db: &Connection) -> Result<(), crate::intern_error::Error> {
     db.execute(
         "CREATE TABLE objects (
         uuid TEXT,
+        name TEXT,
         last_modified TEXT,
         parent TEXT,
         pinned NUMBER,
@@ -121,7 +127,7 @@ pub fn resolve_file_tree(db : &Connection) -> Result<(), crate::intern_error::Er
     )?;
 
     let mut stmt = db.prepare(
-        "INSERT INTO objects VALUES (:uuid, :last_modified, :parent, :pinned, :object_type)",
+        "INSERT INTO objects VALUES (:uuid, :name, :last_modified, :parent, :pinned, :object_type)",
     )?;
 
     match glob("./raw-files/*.metadata") {
@@ -132,6 +138,7 @@ pub fn resolve_file_tree(db : &Connection) -> Result<(), crate::intern_error::Er
                 .map(|f| {
                     stmt.execute(named_params! {
                         ":uuid" : f.uuid,
+                        ":name" : f.name,
                         ":last_modified" : f.last_modified,
                         ":parent" : f.parent,
                         ":pinned" : f.pinned,
