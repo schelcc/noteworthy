@@ -1,96 +1,52 @@
 pub mod fs_interface;
+pub mod intern_error;
 pub mod ui;
 
-use configparser::ini::Ini;
+use fs_interface::resolve_file_tree;
 use rusqlite::Connection;
 use std::{
-    cmp::Ordering, collections::HashMap, error::Error, hash::Hash, io, thread, time::Duration,
+    io::{self, Stdout},
+    time::Duration,
 };
 
-use tui::{
-    self,
-    backend::{Backend, CrosstermBackend},
-    layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
-    text::{Span, Spans},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
-    Frame, Terminal,
-};
+use tui::{self, backend::CrosstermBackend, Terminal};
 
 use crossterm::{
-    self,
-    cursor::position,
+    self, cursor,
     event::{
-        DisableMouseCapture, EnableMouseCapture, Event, EventStream, KeyCode, KeyEvent,
-        KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+        DisableMouseCapture, EnableMouseCapture, Event, EventStream, KeyCode,
+        PopKeyboardEnhancementFlags,
     },
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 
-use futures::{self, future::FusedFuture, select, FutureExt, StreamExt};
+use futures::{self, select, FutureExt, StreamExt};
 use futures_timer::Delay;
 
-use async_std::{future, prelude::*};
+use crate::ui::file_ui;
 
-use crate::ui::{FileUI, file_ui};
-
-enum DispatchReturn {
-    Exit,
-}
-
-fn main() -> Result<(), io::Error> {
-    async_std::task::block_on(render_base());
-    //    if let Err(why) = fs_interface::resolve_file_tree() {
-    //        println!("[ERR] {:?}", why)
-    //    };
-    //
-    Ok(())
-}
-
-async fn render_base() -> Result<(), io::Error> {
+fn main() -> Result<(), crate::intern_error::Error> {
     // Setup + Initialization
     let mut stdout = io::stdout();
 
     enable_raw_mode()?;
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?; // Alternate screen shit
+
+    execute!(
+        stdout,
+        EnterAlternateScreen,
+        EnableMouseCapture,
+        cursor::Show
+    )?;
 
     let backend = CrosstermBackend::new(stdout);
-    let mut reader = EventStream::new();
     let mut terminal = Terminal::new(backend)?;
 
-    
-    let db = Connection::open_in_memory().expect("Fatal error: Failed to open SQLite database in memory");
-    
+    terminal.show_cursor()?;
 
-    loop {
-        // let mut delay = Delay::new(Duration::from_millis(1000)).fuse();
-        let mut key_event = reader.next().fuse();
-        let mut render_event = Delay::new(Duration::from_secs_f32(0.05)).fuse();
+    let db = Connection::open_in_memory()?;
 
-        select! {
-            res_event = key_event => match res_event {
-                Some(Ok(event)) => match event {
-                    // KEY EVENT HANDLING
-                    Event::Key(event) =>  {
-                        match event.code {
-                            KeyCode::Esc | KeyCode::Char('q') => break,
-                            _ => ()
-                        }
-                    },
-                    _ => (),
-                },
-                Some(Err(_)) | None => break,
-            },
-            _ = render_event => {
-                terminal.draw(|f| {
-                    file_ui("", "", &db).render(f);
-                });
-            }
-        };
-    }
-
-    // Quit stuff
+    let conclusion = async_std::task::block_on(render_base(&mut terminal, &db));
 
     disable_raw_mode()?;
     execute!(
@@ -100,43 +56,57 @@ async fn render_base() -> Result<(), io::Error> {
         PopKeyboardEnhancementFlags
     )?;
 
-    // terminal.show_cursor()?;
+    terminal.show_cursor()?;
+
+    println!("{:?}", conclusion);
 
     Ok(())
 }
 
-// fn main_screen<B: Backend>(f: &mut Frame<B>, dbg_buf: &Vec<Spans>) {
-//     // Get terminal dimensions to assist in multi-direciton layout
-//     let dim = f.size();
+async fn render_base(
+    terminal: &mut Terminal<CrosstermBackend<Stdout>>,
+    db: &Connection,
+) -> Result<(), crate::intern_error::Error> {
+    let mut reader = EventStream::new();
 
-//     // horizontal_layout = [navbar, main frame, footer]
-//     let horizontal_layout = Layout::default()
-//         .direction(Direction::Vertical)
-//         .constraints(
-//             [
-//                 Constraint::Percentage(5),
-//                 Constraint::Percentage(90),
-//                 Constraint::Percentage(5),
-//             ]
-//             .as_ref(),
-//         )
-//         .split(dim);
+    resolve_file_tree(&db)?;
 
-//     // split_layout = [local_fs, remote_fs]
-//     let split_layout = Layout::default()
-//         .direction(Direction::Horizontal)
-//         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
-//         .split(horizontal_layout[1]);
+    let conclusion: Result<(), crate::intern_error::Error>;
 
-//     // PLACEHOLDERS
-//     let local_fs = Block::default()
-//         .title("Local file system")
-//         .borders(Borders::ALL);
+    let mut ui = file_ui("/home/schelcc/Documents", "root", &db)?;
 
-//     let remote_fs = Block::default()
-//         .title("reMarkable file system")
-//         .borders(Borders::ALL);
+    match loop {
+        let mut key_event = reader.next().fuse();
+        let mut render_event = Delay::new(Duration::from_secs_f32(0.05)).fuse();
 
-//     f.render_widget(local_fs, split_layout[0]);
-//     f.render_widget(remote_fs, split_layout[1]);
-// }
+        select! {
+            res_event = key_event => match res_event {
+                Some(Ok(event)) => match event {
+                    // KEY EVENT HANDLING
+                    Event::Key(event) =>  {
+                        match event.code {
+                            KeyCode::Esc | KeyCode::Char('q') => break Ok(()),
+                            KeyCode::Up => {ui.cursor_move(ui::CursorDirection::Up);},
+                            KeyCode::Down => {ui.cursor_move(ui::CursorDirection::Down);},
+                            KeyCode::Tab => {ui.toggle_focus();},
+                            _ => ()
+                        }
+                    },
+                    _ => (),
+                },
+                Some(Err(why)) => break Err(why.into()),
+                None => break Err(crate::intern_error::Error::CrosstermError(String::from("None KeyEvent"))),
+            },
+            _ = render_event => {
+                terminal.draw(|f| {
+                    ui.render(f);
+                })?;
+            }
+        };
+    } {
+        Err(why) => conclusion = Err(why),
+        Ok(_) => conclusion = Ok(()),
+    };
+
+    conclusion
+}

@@ -1,22 +1,35 @@
 use ::glob::{self, glob};
 use glob::GlobError;
-use rusqlite::{self, named_params, Connection, Error, Result};
+use rusqlite::{self, named_params, types::FromSql, Connection, Error, Result};
 use std::{
     fs,
     path::{Path, PathBuf},
     str::Lines,
 };
 
-#[derive(Debug)]
-enum MetadataType {
+#[derive(Debug, Default)]
+pub enum MetadataType {
     CollectionType,
     DocumentType,
     ErrorType,
+    #[default]
+    DefaultType,
 }
 
-#[derive(Debug)]
+impl FromSql for MetadataType {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        String::column_result(value).and_then(|f| match f.as_str() {
+            "CollectionType" => Ok(Self::CollectionType),
+            "DocumentType" => Ok(Self::DocumentType),
+            _ => Ok(Self::ErrorType),
+        })
+    }
+}
+
+#[derive(Debug, Default)]
 struct Metadata {
     uuid: String,
+    name: String,
     last_modified: String,
     parent: String,
     pinned: bool,
@@ -37,6 +50,7 @@ impl MetadataType {
             Self::DocumentType => "DocumentType",
             Self::CollectionType => "CollectionType",
             Self::ErrorType => "ErrorType",
+            Self::DefaultType => "DefaultType",
         }
     }
 }
@@ -59,10 +73,7 @@ impl Metadata {
 
         let mut row = Metadata {
             uuid: file_name,
-            last_modified: String::from(""),
-            parent: String::from(""),
-            pinned: false,
-            object_type: MetadataType::ErrorType,
+            ..Default::default()
         };
 
         for line in file.lines() {
@@ -100,6 +111,9 @@ impl Metadata {
                                 .as_ref(),
                         )
                     }
+                    "visibleName" => {
+                        row.name = value.unwrap().to_string().trim().replace(",", "");
+                    }
                     _ => (),
                 },
             }
@@ -109,24 +123,21 @@ impl Metadata {
     }
 }
 
-pub fn resolve_file_tree(db : &Connection){
-    match db.execute(
+pub fn resolve_file_tree(db: &Connection) -> Result<(), crate::intern_error::Error> {
+    db.execute(
         "CREATE TABLE objects (
         uuid TEXT,
+        name TEXT,
         last_modified TEXT,
         parent TEXT,
         pinned NUMBER,
-        object_type TEXT)",
+        object_type TEXT )",
         (),
-    ) {
-        // TODO: Handle table creation error
-        Err(err) => panic!("[ERR] {:?}", err),
-        Ok(_) => (),
-    };
+    )?;
 
     let mut stmt = db.prepare(
-        "INSERT INTO objects VALUES (:uuid, :last_modified, :parent, :pinned, :object_type)",
-    ).expect("Fatal error: Failed to insert into table");
+        "INSERT INTO objects VALUES (:uuid, :name, :last_modified, :parent, :pinned, :object_type)",
+    )?;
 
     match glob("./raw-files/*.metadata") {
         Err(why) => println!("[ERR] Failed to read glob pattern ({:?})", why),
@@ -136,6 +147,7 @@ pub fn resolve_file_tree(db : &Connection){
                 .map(|f| {
                     stmt.execute(named_params! {
                         ":uuid" : f.uuid,
+                        ":name" : f.name,
                         ":last_modified" : f.last_modified,
                         ":parent" : f.parent,
                         ":pinned" : f.pinned,
@@ -146,7 +158,5 @@ pub fn resolve_file_tree(db : &Connection){
         }
     };
 
-    // db
-
-    // Ok(())
+    Ok(())
 }
