@@ -4,8 +4,9 @@ use rusqlite::{named_params, Connection};
 use tui::{
     backend::Backend,
     layout::{Constraint, Layout},
-    widgets::{Block, Borders, ListItem, List},
-    Frame, style::{Style, Color, Modifier},
+    style::{Color, Modifier, Style},
+    widgets::{Block, Borders, List, ListItem},
+    Frame,
 };
 
 pub struct CursorPos {
@@ -13,16 +14,20 @@ pub struct CursorPos {
     row: usize,
 }
 
-pub struct ListFile {
+pub struct FileItem {
     uuid: String,
     // name: String,
     highlighted: bool,
 }
 
+pub struct FileList {
+    content: Vec<FileItem>
+}
+
 struct FSBlock {
     name: String,
     parent: String,
-    content: Vec<ListFile>,
+    content: FileList,
     // cursor: CursorPos,
 }
 
@@ -31,54 +36,83 @@ pub struct FileUI {
     remote: FSBlock,
 }
 
-impl FSBlock {
-    fn resolve_from_db(&mut self, db: &Connection) {
-        let mut stmt = match db
-            .prepare(format!("SELECT uuid FROM objects WHERE parent={}", self.parent).as_str())
-        {
-            Err(why) => panic!("{}", why),
-            Ok(res) => res,
+impl FileList {
+    fn push(&mut self, value : FileItem) {
+        self.content.push(value);
+    }
+
+    fn new() -> Self {
+        FileList {
+            content : Vec::new()
+        }
+    }
+}
+
+impl From<FileList> for Vec<ListItem<'_>> {
+    fn from(value : FileList) -> Self {
+        let mut result : Vec<ListItem> = Vec::new();
+
+        for item in value.content {
+            result.push(ListItem::new(item.uuid));
         };
 
+        result
+    }
+}
+
+impl FSBlock {
+    fn resolve_from_db(&mut self, db: &Connection) -> Result<(), crate::intern_error::Error> {
+        let mut stmt = db.prepare("SELECT uuid FROM objects WHERE parent=?1")?;
+
         let file_iter = stmt
-            .query_map([], |r| {
-                Ok(ListFile {
+            .query_map([&self.parent], |r| {
+                Ok(FileItem {
                     uuid: match r.get(0) {
                         Err(_) => String::from("error"),
                         Ok(res) => res,
                     },
                     highlighted: false,
                 })
-            })
-            .expect("Fatal error: stuff");
+            })?;
 
         for row in file_iter {
             if let Ok(row) = row {
                 self.content.push(row);
             }
-        }
+        };
+
+        Ok(())
     }
 
-    fn resolve_from_dir(&mut self) {
+    fn resolve_from_dir(&mut self) -> Result<(), crate::intern_error::Error> {
         // TODO: Handle error
         let paths = fs::read_dir(&self.parent).expect("Fatal error: Couldn't read directory");
 
         for path in paths {
             match path {
                 Err(_) => (),
-                Ok(res_path) => self.content.push(ListFile { uuid: res_path.path().display().to_string(), highlighted: false })
+                Ok(res_path) => self.content.push(FileItem {
+                    uuid: res_path.path().display().to_string(),
+                    highlighted: false,
+                }),
             }
-        }
+        };
+
+        Ok(())
     }
 
-    fn spawn_widget(&self) -> Block {
+    fn spawn_widget(self) -> List<'static> {
         // TODO
-        List::new(self.content).block(Block::default().title(self.title).borders(Borders::ALL)).style(Style::default().fg(Color::White)).highlight_style(Style::default().add_modifier(Modifier::ITALIC)).highlight_symbol(">>");
+        List::new(self.content)
+            .block(Block::default().title(self.name).borders(Borders::ALL))
+            .style(Style::default().fg(Color::White))
+            .highlight_style(Style::default().add_modifier(Modifier::ITALIC))
+            .highlight_symbol(">>")
     }
 }
 
 impl FileUI {
-    pub fn render<B: Backend>(&self, f: &mut Frame<B>) {
+    pub fn render<B: Backend>(self, f: &mut Frame<B>) {
         let layout = Layout::default()
             .direction(tui::layout::Direction::Horizontal)
             .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
@@ -89,21 +123,21 @@ impl FileUI {
     }
 }
 
-pub fn file_ui(local_parent: &str, remote_parent: &str, db: &Connection) -> FileUI {
+pub fn file_ui(local_parent: &str, remote_parent: &str, db: &Connection) -> Result<FileUI, crate::intern_error::Error> {
     let mut ui = FileUI {
         local: FSBlock {
             name: String::from("local"),
             parent: local_parent.to_string(),
-            content: Vec::new(),
+            content: FileList::new(),
         },
         remote: FSBlock {
             name: String::from("remote"),
             parent: remote_parent.to_string(),
-            content: Vec::new(),
+            content: FileList::new(),
         },
     };
 
-    ui.remote.resolve_from_db(db);
+    ui.remote.resolve_from_db(db)?;
 
-    ui
+    Ok(ui)
 }
