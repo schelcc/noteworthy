@@ -1,20 +1,32 @@
 use ::glob::{self, glob};
 use glob::GlobError;
-use rusqlite::{self, named_params, Connection, Error, Result};
+use rusqlite::{self, named_params, types::FromSql, Connection, Error, Result};
 use std::{
     fs,
     path::{Path, PathBuf},
     str::Lines,
 };
 
-#[derive(Debug)]
-enum MetadataType {
+#[derive(Debug, Default)]
+pub enum MetadataType {
     CollectionType,
     DocumentType,
     ErrorType,
+    #[default]
+    DefaultType,
 }
 
-#[derive(Debug)]
+impl FromSql for MetadataType {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        String::column_result(value).and_then(|f| match f.as_str() {
+            "CollectionType" => Ok(Self::CollectionType),
+            "DocumentType" => Ok(Self::DocumentType),
+            _ => Ok(Self::ErrorType),
+        })
+    }
+}
+
+#[derive(Debug, Default)]
 struct Metadata {
     uuid: String,
     name: String,
@@ -38,6 +50,7 @@ impl MetadataType {
             Self::DocumentType => "DocumentType",
             Self::CollectionType => "CollectionType",
             Self::ErrorType => "ErrorType",
+            Self::DefaultType => "DefaultType",
         }
     }
 }
@@ -60,11 +73,7 @@ impl Metadata {
 
         let mut row = Metadata {
             uuid: file_name,
-            name: String::from(""),
-            last_modified: String::from(""),
-            parent: String::from(""),
-            pinned: false,
-            object_type: MetadataType::ErrorType,
+            ..Default::default()
         };
 
         for line in file.lines() {
