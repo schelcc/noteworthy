@@ -35,13 +35,10 @@ fn main() -> Result<(), crate::intern_error::Error> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let db = Connection::open("foo.db")?;
+    let db = Connection::open_in_memory()?;
 
 
-    match async_std::task::block_on(render_base(&mut terminal, &db)) {
-        Err(why) => println!("[ERR] : {:?}", why),
-        Ok(_) => (),
-    };
+    let conclusion = async_std::task::block_on(render_base(&mut terminal, &db));
 
     disable_raw_mode()?;
     execute!(
@@ -52,6 +49,8 @@ fn main() -> Result<(), crate::intern_error::Error> {
     )?;
 
     terminal.show_cursor()?;
+
+    println!("{:?}", conclusion);
 
     Ok(())
 }
@@ -84,7 +83,7 @@ async fn render_base(terminal : &mut Terminal<CrosstermBackend<Stdout>>, db : &C
             },
             _ = render_event => {
                 terminal.draw(|f| {
-                    match file_ui("", "", &db) {
+                    match file_ui("/home/schelcc/", "root", &db) {
                         Err(_) => (),
                         Ok(ui) => ui.render(f)
                     }

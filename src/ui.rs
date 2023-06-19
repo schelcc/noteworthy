@@ -85,7 +85,6 @@ impl FSBlock {
     }
 
     fn resolve_from_dir(&mut self) -> Result<(), crate::intern_error::Error> {
-        // TODO: Handle error
         let paths = fs::read_dir(&self.parent).expect("Fatal error: Couldn't read directory");
 
         for path in paths {
@@ -97,6 +96,8 @@ impl FSBlock {
                 }),
             }
         };
+
+
 
         Ok(())
     }
@@ -138,6 +139,7 @@ pub fn file_ui(local_parent: &str, remote_parent: &str, db: &Connection) -> Resu
     };
 
     ui.remote.resolve_from_db(db)?;
+    ui.local.resolve_from_dir()?;
 
     Ok(ui)
 }
