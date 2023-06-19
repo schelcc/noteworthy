@@ -7,13 +7,13 @@ pub enum Error {
 }
 
 impl From<std::io::Error> for Error {
-    fn from(value : std::io::Error) -> Error {
+    fn from(value: std::io::Error) -> Error {
         Error::CrosstermError(value.to_string())
     }
 }
 
 impl From<rusqlite::Error> for Error {
-    fn from(value : rusqlite::Error) -> Error {
+    fn from(value: rusqlite::Error) -> Error {
         Error::SQLiteError(value.to_string())
     }
 }
