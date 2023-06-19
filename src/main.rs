@@ -73,7 +73,7 @@ async fn render_base(
 
     let conclusion: Result<(), crate::intern_error::Error>;
 
-    let mut ui = file_ui("/home/schelcc/", "root", &db)?;
+    let mut ui = file_ui("/home/schelcc/Documents", "root", &db)?;
 
     match loop {
         let mut key_event = reader.next().fuse();
