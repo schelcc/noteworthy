@@ -1,6 +1,11 @@
 use std::{cmp::Ordering, fs};
 
-use rusqlite::{named_params, Connection};
+use rusqlite::{
+    named_params,
+    types::{FromSql, FromSqlError},
+    Connection, ToSql,
+};
+
 use tui::{
     backend::Backend,
     layout::{Constraint, Layout},
@@ -9,33 +14,36 @@ use tui::{
     Frame,
 };
 
+use crate::fs_interface::MetadataType;
+
+#[derive(Default)]
 pub enum Display {
+    #[default]
     LocalRemoteSplit,
 }
 
-pub struct CursorPos {
-    col: usize,
-    row: usize,
-}
-
+#[derive(Default)]
 pub struct FileItem {
     uuid: String,
     name: String,
-    highlighted: bool,
+    file_type: MetadataType,
 }
 
+#[derive(Default)]
 pub struct FileList {
     content: Vec<FileItem>,
     cursor_idx: usize,
 }
 
+#[derive(Default)]
 struct FSBlock {
     name: String,
     parent: String,
     content: FileList,
-    // cursor: CursorPos,
+    focused: bool,
 }
 
+#[derive(PartialEq)]
 enum FileUIFocus {
     Local,
     Remote,
@@ -53,6 +61,7 @@ pub struct FileUI {
 }
 
 impl FileList {
+    // Forward .push() for wrapper struct
     fn push(&mut self, value: FileItem) {
         self.content.push(value);
     }
@@ -64,30 +73,45 @@ impl FileList {
         }
     }
 
+    // Adjust the currently selected row dependent on the CursorDirection struct
     pub fn cusor_move(&mut self, direction: CursorDirection) {
         let delta = match direction {
             CursorDirection::Up => -1,
             CursorDirection::Down => 1,
         };
 
+        // Ensure cursor doesn't try to go to a row that doesn't exist
         self.cursor_idx = match self.cursor_idx.checked_add_signed(delta) {
-            Some(val) => val,
+            Some(val) => match &val.cmp(&self.content.len()) {
+                Ordering::Less => val,
+                Ordering::Equal | Ordering::Greater => self.cursor_idx,
+            },
             None => self.cursor_idx,
         };
     }
-}
 
-impl From<&FileList> for Vec<ListItem<'_>> {
-    fn from(value: &FileList) -> Self {
+    // Convert FileList to Vec<ListItem> for tui to generate an array of ListItems from
+    // Applies cursor styling, depends on focus bool, hiding underline if not focused
+    pub fn to_item_list(&self, focus: bool) -> Vec<ListItem> {
         let mut result: Vec<ListItem> = Vec::new();
 
-        for (idx, item) in value.content.iter().enumerate() {
-            match idx.cmp(&value.cursor_idx) {
-                Ordering::Equal => result.push(
-                    ListItem::new(item.name.clone())
+        for (idx, item) in self.content.iter().enumerate() {
+            // Add "/" prefix to any CollectionTypes to denote directory
+            let mut file_name = match item.file_type {
+                MetadataType::CollectionType => String::from("/"),
+                _ => String::from(""),
+            };
+
+            file_name.push_str(&item.name);
+
+            // Push ListItem w/ underline if focused, otherwise just regular ListItem
+            if focus && idx.cmp(&self.cursor_idx) == Ordering::Equal {
+                result.push(
+                    ListItem::new(file_name)
                         .style(Style::default().add_modifier(Modifier::UNDERLINED)),
-                ),
-                _ => result.push(ListItem::new(item.name.clone())),
+                )
+            } else {
+                result.push(ListItem::new(file_name))
             }
         }
 
@@ -96,21 +120,15 @@ impl From<&FileList> for Vec<ListItem<'_>> {
 }
 
 impl FSBlock {
+    // Populate FileList from a rusqlite DB
     fn resolve_from_db(&mut self, db: &Connection) -> Result<(), crate::intern_error::Error> {
-        let mut stmt = db.prepare("SELECT uuid, name FROM objects WHERE parent=?1")?;
+        let mut stmt = db.prepare("SELECT uuid, name, object_type FROM objects WHERE parent=?1")?;
 
         let file_iter = stmt.query_map([&self.parent], |r| {
-            // TODO : Update error handling
             Ok(FileItem {
-                uuid: match r.get(0) {
-                    Err(_) => String::from("error"),
-                    Ok(res) => res,
-                },
-                name: match r.get(1) {
-                    Err(_) => String::from("error"),
-                    Ok(res) => res,
-                },
-                highlighted: false,
+                uuid: r.get(0)?,
+                name: r.get(1)?,
+                file_type: MetadataType::from(r.get(2)?),
             })
         })?;
 
@@ -123,16 +141,16 @@ impl FSBlock {
         Ok(())
     }
 
+    // Populate FileList from a directory
     fn resolve_from_dir(&mut self) -> Result<(), crate::intern_error::Error> {
-        let paths = fs::read_dir(&self.parent).expect("Fatal error: Couldn't read directory");
+        let paths = fs::read_dir(&self.parent)?;
 
         for path in paths {
             match path {
                 Err(_) => (),
                 Ok(res_path) => self.content.push(FileItem {
-                    uuid: String::from(""),
                     name: res_path.path().display().to_string(),
-                    highlighted: false,
+                    ..Default::default()
                 }),
             }
         }
@@ -140,9 +158,9 @@ impl FSBlock {
         Ok(())
     }
 
+    // Generate a widget for rendering
     fn spawn_widget(&self) -> List {
-        // TODO
-        List::new(&self.content)
+        List::new(self.content.to_item_list(self.focused))
             .block(
                 Block::default()
                     .title(self.name.clone())
@@ -153,11 +171,15 @@ impl FSBlock {
 }
 
 impl FileUI {
-    pub fn render<B: Backend>(&self, f: &mut Frame<B>) {
+    // Create the layout and then render generated widgets
+    pub fn render<B: Backend>(&mut self, f: &mut Frame<B>) {
         let layout = Layout::default()
             .direction(tui::layout::Direction::Horizontal)
             .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
             .split(f.size());
+
+        self.local.focused = self.focus == FileUIFocus::Local;
+        self.remote.focused = self.focus == FileUIFocus::Remote;
 
         f.render_widget(self.local.spawn_widget(), layout[0]);
         f.render_widget(self.remote.spawn_widget(), layout[1]);
@@ -178,6 +200,7 @@ impl FileUI {
     }
 }
 
+// Helper function to give a FileUI struct
 pub fn file_ui(
     local_parent: &str,
     remote_parent: &str,
@@ -188,11 +211,13 @@ pub fn file_ui(
             name: String::from("local"),
             parent: local_parent.to_string(),
             content: FileList::new(),
+            focused: true,
         },
         remote: FSBlock {
             name: String::from("remote"),
             parent: remote_parent.to_string(),
             content: FileList::new(),
+            focused: false,
         },
         focus: FileUIFocus::Local,
     };
