@@ -1,10 +1,6 @@
 use std::{cmp::Ordering, fs};
 
-use rusqlite::{
-    named_params,
-    types::{FromSql, FromSqlError},
-    Connection, ToSql,
-};
+use rusqlite::{named_params, Connection};
 
 use tui::{
     backend::Backend,
@@ -314,7 +310,6 @@ impl FileUI {
         //         self.remote.content.cursor_idx = 0;
         //     }
         // }
-
         let focused_block = match self.focus {
             FileUIFocus::Local => &mut self.local,
             FileUIFocus::Remote => &mut self.remote,
