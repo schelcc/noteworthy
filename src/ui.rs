@@ -14,7 +14,10 @@ use tui::{
     Frame,
 };
 
-use crate::{fs_interface::MetadataType, intern_error};
+use crate::{
+    fs_interface::{self, MetadataType},
+    intern_error,
+};
 
 #[derive(Default)]
 pub enum Display {
@@ -26,6 +29,7 @@ pub enum Display {
 pub struct FileItem {
     uuid: String,
     name: String,
+    path: String,
     file_type: MetadataType,
 }
 
@@ -118,20 +122,41 @@ impl FileList {
             let mut file_name = match item.file_type {
                 MetadataType::CollectionType => String::from("/"),
                 MetadataType::ReturnType => String::from("../"),
-                _ => String::from(""),
+                _ => String::from(" "),
             };
 
-            file_name.push_str(&item.name);
+            let mut style = Style::default();
+
+            match item.file_type {
+                MetadataType::CollectionType => {
+                    style = style.add_modifier(Modifier::BOLD);
+                }
+                MetadataType::DocumentType => {
+                    style = style.add_modifier(Modifier::ITALIC);
+                }
+                MetadataType::ReturnType => {
+                    style = style.add_modifier(Modifier::BOLD);
+                }
+                MetadataType::ErrorType => {
+                    style = style.add_modifier(Modifier::CROSSED_OUT);
+                }
+                MetadataType::DefaultType => {
+                    style = style.add_modifier(Modifier::DIM);
+                }
+            }
+
+            if item.file_type == MetadataType::CollectionType
+                || item.file_type == MetadataType::DocumentType
+            {
+                file_name.push_str(&item.name);
+            }
 
             // Push ListItem w/ underline if focused, otherwise just regular ListItem
             if focus && idx.cmp(&self.cursor_idx) == Ordering::Equal {
-                result.push(
-                    ListItem::new(file_name)
-                        .style(Style::default().add_modifier(Modifier::UNDERLINED)),
-                )
-            } else {
-                result.push(ListItem::new(file_name))
+                style = style.add_modifier(Modifier::UNDERLINED);
             }
+
+            result.push(ListItem::new(file_name).style(style));
         }
 
         result
@@ -148,21 +173,27 @@ impl FSBlock {
         let file_iter = stmt.query_map([&self.parent], |r| {
             Ok(FileItem {
                 uuid: r.get(0)?,
+                path: r.get(0)?,
                 name: r.get(1)?,
-                file_type: MetadataType::from(r.get(2)?),
+                file_type: MetadataType::from(r.get::<usize, String>(2)?),
+                ..Default::default()
             })
         })?;
 
-        match self.last_parents.last() {
-            Some(res) => {
+        match db.query_row(
+            "SELECT parent FROM objects WHERE uuid=:uuid",
+            named_params! {":uuid":self.parent},
+            |r| r.get::<usize, String>(0),
+        ) {
+            Err(_) => (),
+            Ok(val) => {
                 self.content.push(FileItem {
-                    name: res.to_string(),
+                    path: val,
                     file_type: MetadataType::ReturnType,
                     ..Default::default()
                 });
             }
-            None => (),
-        }
+        };
 
         for row in file_iter {
             if let Ok(row) = row {
@@ -174,27 +205,24 @@ impl FSBlock {
     }
 
     // Populate FileList from a directory
-    fn resolve_from_dir(&mut self) -> Result<(), crate::intern_error::Error> {
+    fn resolve_from_dir(&mut self) -> Result<(), intern_error::Error> {
         self.content.content = Vec::new();
 
         let paths = fs::read_dir(&self.parent)?;
 
-        match self.last_parents.last() {
-            Some(res) => {
-                self.content.push(FileItem {
-                    name: res.to_string(),
-                    file_type: MetadataType::ReturnType,
-                    ..Default::default()
-                });
-            }
-            None => (),
-        };
+        self.content.push(FileItem {
+            file_type: MetadataType::ReturnType,
+            path: fs_interface::walk_back_path(self.parent.clone())?,
+            ..Default::default()
+        });
 
         for path in paths {
             match path {
                 Err(_) => (),
                 Ok(res_path) => self.content.push(FileItem {
-                    name: res_path.path().display().to_string(),
+                    name: res_path.file_name().to_str().unwrap().to_string(),
+                    file_type: MetadataType::from(res_path.file_type().unwrap()),
+                    path: res_path.path().display().to_string(),
                     ..Default::default()
                 }),
             }
@@ -255,51 +283,62 @@ impl FileUI {
     }
 
     pub fn expand_selection(&mut self) -> Result<(), intern_error::Error> {
-        match self.focus {
-            FileUIFocus::Local => {
-                self.local.last_parents.push(self.local.parent.clone());
-                self.local.parent = match self.local.content.get(self.local.content.cursor_idx) {
-                    Some(val) => {
-                        if (val.file_type) == MetadataType::ReturnType {
-                            self.local.last_parents.pop();
-                        };
-                        (*val.name).to_string()
-                    }
-                    None => {
-                        return Err(intern_error::Error::OutOfBoundsError(
-                            self.local.content.cursor_idx,
-                        ))
-                    }
-                };
+        // match self.focus {
+        //     FileUIFocus::Local => {
+        //         self.local.parent = match self.local.content.get(self.local.content.cursor_idx) {
+        //             Some(val) => {
+        //                 if val.file_type == MetadataType::CollectionType || val.file_type == MetadataType::ReturnType {
+        //                     (*val.path).to_string()
+        //                 } else {
+        //                     self.local.parent
+        //                 }
+        //             },
+        //             None => {
+        //                 return Err(intern_error::Error::OutOfBoundsError(
+        //                     self.local.content.cursor_idx,
+        //                 ))
+        //             }
+        //         };
+        //         self.local.content.cursor_idx = 0;
+        //     }
+        //     FileUIFocus::Remote => {
+        //         self.remote.parent = match self.remote.content.get(self.remote.content.cursor_idx) {
+        //             Some(val) => (*val.path).to_string(),
+        //             None => {
+        //                 return Err(intern_error::Error::OutOfBoundsError(
+        //                     self.remote.content.cursor_idx,
+        //                 ))
+        //             }
+        //         };
 
-                if self.local.content.cursor_idx == 0 && self.local.content.content.len() > 0 {
-                    self.local.last_parents.pop();
+        //         self.remote.content.cursor_idx = 0;
+        //     }
+        // }
+
+        let focused_block = match self.focus {
+            FileUIFocus::Local => &mut self.local,
+            FileUIFocus::Remote => &mut self.remote,
+        };
+
+        let mut updated = false;
+
+        focused_block.parent = match focused_block.content.get(focused_block.content.cursor_idx) {
+            Some(val) => match val.file_type {
+                MetadataType::CollectionType | MetadataType::ReturnType => {
+                    updated = true;
+                    (*val.path).to_string()
                 }
-
-                self.local.content.cursor_idx = 0;
+                _ => focused_block.parent.clone(),
+            },
+            None => {
+                return Err(intern_error::Error::OutOfBoundsError(
+                    focused_block.content.cursor_idx,
+                ))
             }
-            FileUIFocus::Remote => {
-                self.remote.last_parents.push(self.remote.parent.clone());
-                self.remote.parent = match self.remote.content.get(self.remote.content.cursor_idx) {
-                    Some(val) => {
-                        if (val.file_type) == MetadataType::ReturnType {
-                            self.remote.last_parents.pop();
-                        };
-                        (*val.name).to_string()
-                    }
-                    None => {
-                        return Err(intern_error::Error::OutOfBoundsError(
-                            self.remote.content.cursor_idx,
-                        ))
-                    }
-                };
+        };
 
-                // if self.remote.content.cursor_idx == 0 && self.remote.content.content.len() > 0 {
-                //     self.remote.last_parents.pop();
-                // }
-
-                self.remote.content.cursor_idx = 0;
-            }
+        if updated {
+            focused_block.content.cursor_idx = 0;
         }
 
         Ok(())

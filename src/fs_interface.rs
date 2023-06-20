@@ -3,6 +3,8 @@ use glob::GlobError;
 use rusqlite::{self, named_params, types::FromSql, Connection, Result};
 use std::{fs, path::PathBuf};
 
+use crate::intern_error;
+
 #[derive(Debug, Default, PartialEq)]
 pub enum MetadataType {
     CollectionType,
@@ -20,6 +22,34 @@ impl FromSql for MetadataType {
             "DocumentType" => Ok(Self::DocumentType),
             _ => Ok(Self::ErrorType),
         })
+    }
+}
+
+impl From<std::fs::FileType> for MetadataType {
+    fn from(value: std::fs::FileType) -> Self {
+        if value.is_dir() {
+            Self::CollectionType
+        } else if value.is_file() {
+            Self::DocumentType
+        } else {
+            Self::ErrorType
+        }
+    }
+}
+
+impl From<()> for MetadataType {
+    fn from(_value: ()) -> Self {
+        MetadataType::ErrorType
+    }
+}
+
+impl From<String> for MetadataType {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "CollectionType" => Self::CollectionType,
+            "DocumentType" => Self::DocumentType,
+            _ => Self::ErrorType,
+        }
     }
 }
 
@@ -158,4 +188,22 @@ pub fn resolve_file_tree(db: &Connection) -> Result<(), crate::intern_error::Err
     };
 
     Ok(())
+}
+
+pub fn walk_back_path(path: String) -> Result<String, intern_error::Error> {
+    let dirs: Vec<&str> = path.split("/").collect();
+
+    match dirs.len().checked_add_signed(-1) {
+        None => return Err(intern_error::Error::WalkBackError),
+        Some(val) => {
+            let mut output = String::new();
+
+            for item in &dirs[..val] {
+                output.push('/');
+                output.push_str(item)
+            }
+
+            Ok(output)
+        }
+    }
 }

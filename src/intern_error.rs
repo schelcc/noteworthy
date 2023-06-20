@@ -6,6 +6,8 @@ pub enum Error {
     SQLiteError(String),
     #[error("[ERR] Internal : Failed to retrieve index {0} from struct")]
     OutOfBoundsError(usize),
+    #[error("[ERR] Internal : Cannot walk back any more")]
+    WalkBackError,
 }
 
 impl From<std::io::Error> for Error {
