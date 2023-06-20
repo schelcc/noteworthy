@@ -71,11 +71,12 @@ async fn render_base(
 
     resolve_file_tree(&db)?;
 
-    let conclusion: Result<(), crate::intern_error::Error>;
+    let conclusion: Result<(), crate::intern_error::Error> = Ok(());
 
+    // Should be based on config
     let mut ui = file_ui("/home/schelcc/Documents", "root", &db)?;
 
-    match loop {
+    loop {
         let mut key_event = reader.next().fuse();
         let mut render_event = Delay::new(Duration::from_secs_f32(0.05)).fuse();
 
@@ -89,6 +90,7 @@ async fn render_base(
                             KeyCode::Up => {ui.cursor_move(ui::CursorDirection::Up);},
                             KeyCode::Down => {ui.cursor_move(ui::CursorDirection::Down);},
                             KeyCode::Tab => {ui.toggle_focus();},
+                            KeyCode::Enter => {ui.expand_selection()?;},
                             _ => ()
                         }
                     },
@@ -98,15 +100,16 @@ async fn render_base(
                 None => break Err(crate::intern_error::Error::CrosstermError(String::from("None KeyEvent"))),
             },
             _ = render_event => {
+                let mut render_result : Result<(), intern_error::Error> = Ok(());
+
                 terminal.draw(|f| {
-                    ui.render(f);
+                    render_result = ui.render(f, &db);
                 })?;
+
+                render_result?;
             }
         };
-    } {
-        Err(why) => conclusion = Err(why),
-        Ok(_) => conclusion = Ok(()),
-    };
+    }?;
 
     conclusion
 }

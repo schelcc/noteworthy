@@ -4,6 +4,8 @@ pub enum Error {
     CrosstermError(String),
     #[error("[ERR] SQLite : {0}")]
     SQLiteError(String),
+    #[error("[ERR] Internal : Failed to retrieve index {0} from struct")]
+    OutOfBoundsError(usize),
 }
 
 impl From<std::io::Error> for Error {

@@ -14,7 +14,7 @@ use tui::{
     Frame,
 };
 
-use crate::fs_interface::MetadataType;
+use crate::{fs_interface::MetadataType, intern_error};
 
 #[derive(Default)]
 pub enum Display {
@@ -35,12 +35,25 @@ pub struct FileList {
     cursor_idx: usize,
 }
 
-#[derive(Default)]
+// #[derive(Default)]
 struct FSBlock {
     name: String,
     parent: String,
     content: FileList,
     focused: bool,
+    last_parents: Vec<String>,
+}
+
+impl Default for FSBlock {
+    fn default() -> Self {
+        FSBlock {
+            name: String::default(),
+            parent: String::default(),
+            content: FileList::default(),
+            focused: false,
+            last_parents: Vec::new(),
+        }
+    }
 }
 
 #[derive(PartialEq)]
@@ -73,6 +86,11 @@ impl FileList {
         }
     }
 
+    // Forward .get() for wrapper struct
+    fn get(&self, idx: usize) -> Option<&FileItem> {
+        self.content.get(idx)
+    }
+
     // Adjust the currently selected row dependent on the CursorDirection struct
     pub fn cusor_move(&mut self, direction: CursorDirection) {
         let delta = match direction {
@@ -99,6 +117,7 @@ impl FileList {
             // Add "/" prefix to any CollectionTypes to denote directory
             let mut file_name = match item.file_type {
                 MetadataType::CollectionType => String::from("/"),
+                MetadataType::ReturnType => String::from("../"),
                 _ => String::from(""),
             };
 
@@ -121,7 +140,9 @@ impl FileList {
 
 impl FSBlock {
     // Populate FileList from a rusqlite DB
-    fn resolve_from_db(&mut self, db: &Connection) -> Result<(), crate::intern_error::Error> {
+    fn resolve_from_db(&mut self, db: &Connection) -> Result<(), intern_error::Error> {
+        self.content.content = Vec::new();
+
         let mut stmt = db.prepare("SELECT uuid, name, object_type FROM objects WHERE parent=?1")?;
 
         let file_iter = stmt.query_map([&self.parent], |r| {
@@ -131,6 +152,17 @@ impl FSBlock {
                 file_type: MetadataType::from(r.get(2)?),
             })
         })?;
+
+        match self.last_parents.last() {
+            Some(res) => {
+                self.content.push(FileItem {
+                    name: res.to_string(),
+                    file_type: MetadataType::ReturnType,
+                    ..Default::default()
+                });
+            }
+            None => (),
+        }
 
         for row in file_iter {
             if let Ok(row) = row {
@@ -143,7 +175,20 @@ impl FSBlock {
 
     // Populate FileList from a directory
     fn resolve_from_dir(&mut self) -> Result<(), crate::intern_error::Error> {
+        self.content.content = Vec::new();
+
         let paths = fs::read_dir(&self.parent)?;
+
+        match self.last_parents.last() {
+            Some(res) => {
+                self.content.push(FileItem {
+                    name: res.to_string(),
+                    file_type: MetadataType::ReturnType,
+                    ..Default::default()
+                });
+            }
+            None => (),
+        };
 
         for path in paths {
             match path {
@@ -172,7 +217,11 @@ impl FSBlock {
 
 impl FileUI {
     // Create the layout and then render generated widgets
-    pub fn render<B: Backend>(&mut self, f: &mut Frame<B>) {
+    pub fn render<B: Backend>(
+        &mut self,
+        f: &mut Frame<B>,
+        db: &Connection,
+    ) -> Result<(), intern_error::Error> {
         let layout = Layout::default()
             .direction(tui::layout::Direction::Horizontal)
             .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
@@ -181,8 +230,14 @@ impl FileUI {
         self.local.focused = self.focus == FileUIFocus::Local;
         self.remote.focused = self.focus == FileUIFocus::Remote;
 
+        // TODO : Change to only repopulate upon changes
+        self.local.resolve_from_dir()?;
+        self.remote.resolve_from_db(db)?;
+
         f.render_widget(self.local.spawn_widget(), layout[0]);
         f.render_widget(self.remote.spawn_widget(), layout[1]);
+
+        Ok(())
     }
 
     pub fn toggle_focus(&mut self) {
@@ -198,6 +253,57 @@ impl FileUI {
             FileUIFocus::Remote => self.remote.content.cusor_move(direction),
         };
     }
+
+    pub fn expand_selection(&mut self) -> Result<(), intern_error::Error> {
+        match self.focus {
+            FileUIFocus::Local => {
+                self.local.last_parents.push(self.local.parent.clone());
+                self.local.parent = match self.local.content.get(self.local.content.cursor_idx) {
+                    Some(val) => {
+                        if (val.file_type) == MetadataType::ReturnType {
+                            self.local.last_parents.pop();
+                        };
+                        (*val.name).to_string()
+                    }
+                    None => {
+                        return Err(intern_error::Error::OutOfBoundsError(
+                            self.local.content.cursor_idx,
+                        ))
+                    }
+                };
+
+                if self.local.content.cursor_idx == 0 && self.local.content.content.len() > 0 {
+                    self.local.last_parents.pop();
+                }
+
+                self.local.content.cursor_idx = 0;
+            }
+            FileUIFocus::Remote => {
+                self.remote.last_parents.push(self.remote.parent.clone());
+                self.remote.parent = match self.remote.content.get(self.remote.content.cursor_idx) {
+                    Some(val) => {
+                        if (val.file_type) == MetadataType::ReturnType {
+                            self.remote.last_parents.pop();
+                        };
+                        (*val.name).to_string()
+                    }
+                    None => {
+                        return Err(intern_error::Error::OutOfBoundsError(
+                            self.remote.content.cursor_idx,
+                        ))
+                    }
+                };
+
+                // if self.remote.content.cursor_idx == 0 && self.remote.content.content.len() > 0 {
+                //     self.remote.last_parents.pop();
+                // }
+
+                self.remote.content.cursor_idx = 0;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 // Helper function to give a FileUI struct
@@ -212,12 +318,14 @@ pub fn file_ui(
             parent: local_parent.to_string(),
             content: FileList::new(),
             focused: true,
+            ..Default::default()
         },
         remote: FSBlock {
             name: String::from("remote"),
             parent: remote_parent.to_string(),
             content: FileList::new(),
             focused: false,
+            ..Default::default()
         },
         focus: FileUIFocus::Local,
     };

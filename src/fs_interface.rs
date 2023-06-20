@@ -1,15 +1,12 @@
 use ::glob::{self, glob};
 use glob::GlobError;
-use rusqlite::{self, named_params, types::FromSql, Connection, Error, Result};
-use std::{
-    fs,
-    path::{Path, PathBuf},
-    str::Lines,
-};
+use rusqlite::{self, named_params, types::FromSql, Connection, Result};
+use std::{fs, path::PathBuf};
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub enum MetadataType {
     CollectionType,
+    ReturnType,
     DocumentType,
     ErrorType,
     #[default]
@@ -51,6 +48,7 @@ impl MetadataType {
             Self::CollectionType => "CollectionType",
             Self::ErrorType => "ErrorType",
             Self::DefaultType => "DefaultType",
+            Self::ReturnType => "ReturnType",
         }
     }
 }
@@ -68,7 +66,7 @@ impl Metadata {
                 .nth(0)
                 .unwrap(),
         );
-
+        //fix
         let file = fs::read_to_string(path.unwrap()).expect("foo");
 
         let mut row = Metadata {
@@ -85,6 +83,7 @@ impl Metadata {
             match key {
                 None => (),
                 Some(res) => match res {
+                    // TODO: Clean up .unwrap() usage
                     "lastModified" => {
                         row.last_modified = value.unwrap().trim().to_string().replace(",", "")
                     }
