@@ -33,6 +33,8 @@ pub struct FileItem {
 pub struct FileList {
     content: Vec<FileItem>,
     cursor_idx: usize,
+    offset: usize,
+    render_height: usize,
 }
 
 // #[derive(Default)]
@@ -41,7 +43,8 @@ struct FSBlock {
     parent: String,
     content: FileList,
     focused: bool,
-    last_parents: Vec<String>,
+    offset: usize,
+    render_area: tui::layout::Rect,
 }
 
 impl Default for FSBlock {
@@ -51,7 +54,8 @@ impl Default for FSBlock {
             parent: String::default(),
             content: FileList::default(),
             focused: false,
-            last_parents: Vec::new(),
+            offset: 0usize,
+            render_area: tui::layout::Rect::default(),
         }
     }
 }
@@ -73,6 +77,8 @@ pub struct FileUI {
     focus: FileUIFocus,
 }
 
+const WIDGET_OFFSET: usize = 3;
+
 impl FileList {
     // Forward .push() for wrapper struct
     fn push(&mut self, value: FileItem) {
@@ -83,6 +89,7 @@ impl FileList {
         FileList {
             content: Vec::new(),
             cursor_idx: 0,
+            ..Default::default()
         }
     }
 
@@ -113,7 +120,22 @@ impl FileList {
     pub fn to_item_list(&self, focus: bool) -> Vec<ListItem> {
         let mut result: Vec<ListItem> = Vec::new();
 
+        // Seems to be 4 off
+
+        let offset = match self.cursor_idx.cmp(&self.render_height) {
+            Ordering::Greater => Some(self.cursor_idx - self.render_height),
+            _ => None,
+        };
+
         for (idx, item) in self.content.iter().enumerate() {
+            match offset {
+                Some(val) => {
+                    if idx < val || idx > self.cursor_idx {
+                        continue;
+                    }
+                }
+                None => (),
+            };
             // Add "/" prefix to any CollectionTypes to denote directory
             let mut file_name = match item.file_type {
                 MetadataType::CollectionType => String::from("/"),
@@ -258,6 +280,12 @@ impl FileUI {
         self.local.resolve_from_dir()?;
         self.remote.resolve_from_db(db)?;
 
+        self.local.content.render_height = layout[0].height.into();
+        self.remote.content.render_height = layout[1].height.into();
+
+        self.local.content.render_height -= WIDGET_OFFSET;
+        self.remote.content.render_height -= WIDGET_OFFSET;
+
         f.render_widget(self.local.spawn_widget(), layout[0]);
         f.render_widget(self.remote.spawn_widget(), layout[1]);
 
@@ -279,37 +307,6 @@ impl FileUI {
     }
 
     pub fn expand_selection(&mut self) -> Result<(), intern_error::Error> {
-        // match self.focus {
-        //     FileUIFocus::Local => {
-        //         self.local.parent = match self.local.content.get(self.local.content.cursor_idx) {
-        //             Some(val) => {
-        //                 if val.file_type == MetadataType::CollectionType || val.file_type == MetadataType::ReturnType {
-        //                     (*val.path).to_string()
-        //                 } else {
-        //                     self.local.parent
-        //                 }
-        //             },
-        //             None => {
-        //                 return Err(intern_error::Error::OutOfBoundsError(
-        //                     self.local.content.cursor_idx,
-        //                 ))
-        //             }
-        //         };
-        //         self.local.content.cursor_idx = 0;
-        //     }
-        //     FileUIFocus::Remote => {
-        //         self.remote.parent = match self.remote.content.get(self.remote.content.cursor_idx) {
-        //             Some(val) => (*val.path).to_string(),
-        //             None => {
-        //                 return Err(intern_error::Error::OutOfBoundsError(
-        //                     self.remote.content.cursor_idx,
-        //                 ))
-        //             }
-        //         };
-
-        //         self.remote.content.cursor_idx = 0;
-        //     }
-        // }
         let focused_block = match self.focus {
             FileUIFocus::Local => &mut self.local,
             FileUIFocus::Remote => &mut self.remote,
