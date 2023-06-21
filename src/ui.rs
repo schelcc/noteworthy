@@ -11,6 +11,7 @@ use tui::{
 };
 
 use crate::{
+    config,
     fs_interface::{self, MetadataType},
     intern_error,
 };
@@ -69,6 +70,8 @@ enum FileUIFocus {
 pub enum CursorDirection {
     Up,
     Down,
+    PgUp,
+    PgDn,
 }
 
 pub struct FileUI {
@@ -103,15 +106,17 @@ impl FileList {
         let delta = match direction {
             CursorDirection::Up => -1,
             CursorDirection::Down => 1,
+            CursorDirection::PgUp => -15,
+            CursorDirection::PgDn => 15,
         };
 
         // Ensure cursor doesn't try to go to a row that doesn't exist
         self.cursor_idx = match self.cursor_idx.checked_add_signed(delta) {
             Some(val) => match &val.cmp(&self.content.len()) {
                 Ordering::Less => val,
-                Ordering::Equal | Ordering::Greater => self.cursor_idx,
+                Ordering::Equal | Ordering::Greater => self.content.len() - 1,
             },
-            None => self.cursor_idx,
+            None => 0,
         };
     }
 
@@ -119,8 +124,6 @@ impl FileList {
     // Applies cursor styling, depends on focus bool, hiding underline if not focused
     pub fn to_item_list(&self, focus: bool) -> Vec<ListItem> {
         let mut result: Vec<ListItem> = Vec::new();
-
-        // Seems to be 4 off
 
         let offset = match self.cursor_idx.cmp(&self.render_height) {
             Ordering::Greater => Some(self.cursor_idx - self.render_height),
@@ -156,7 +159,8 @@ impl FileList {
                     style = style.add_modifier(Modifier::BOLD);
                 }
                 MetadataType::ErrorType => {
-                    style = style.add_modifier(Modifier::CROSSED_OUT);
+                    // Skip error types
+                    continue;
                 }
                 MetadataType::DefaultType => {
                     style = style.add_modifier(Modifier::DIM);
@@ -171,7 +175,9 @@ impl FileList {
 
             // Push ListItem w/ underline if focused, otherwise just regular ListItem
             if focus && idx.cmp(&self.cursor_idx) == Ordering::Equal {
-                style = style.add_modifier(Modifier::UNDERLINED);
+                style = style
+                    .add_modifier(Modifier::UNDERLINED)
+                    .add_modifier(Modifier::REVERSED);
             }
 
             result.push(ListItem::new(file_name).style(style));
@@ -257,7 +263,11 @@ impl FSBlock {
                     .title(self.name.clone())
                     .borders(Borders::ALL),
             )
-            .style(Style::default().fg(Color::White))
+            .style(
+                Style::default()
+                    .fg(config::THEME.foreground)
+                    .bg(config::THEME.background),
+            )
     }
 }
 
