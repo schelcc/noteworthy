@@ -1,3 +1,4 @@
+pub mod config;
 pub mod fs_interface;
 pub mod intern_error;
 pub mod ui;
@@ -91,6 +92,8 @@ async fn render_base(
                             KeyCode::Down => {ui.cursor_move(ui::CursorDirection::Down);},
                             KeyCode::Tab => {ui.toggle_focus();},
                             KeyCode::Enter => {ui.expand_selection()?;},
+                            KeyCode::PageDown => {ui.cursor_move(ui::CursorDirection::PgDn);},
+                            KeyCode::PageUp => {ui.cursor_move(ui::CursorDirection::PgUp);},
                             _ => ()
                         }
                     },
