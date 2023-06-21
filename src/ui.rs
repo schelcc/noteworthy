@@ -5,7 +5,7 @@ use rusqlite::{named_params, Connection};
 use tui::{
     backend::Backend,
     layout::{Constraint, Layout},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     widgets::{Block, Borders, List, ListItem},
     Frame,
 };
@@ -34,7 +34,6 @@ pub struct FileItem {
 pub struct FileList {
     content: Vec<FileItem>,
     cursor_idx: usize,
-    offset: usize,
     render_height: usize,
 }
 
@@ -44,8 +43,6 @@ struct FSBlock {
     parent: String,
     content: FileList,
     focused: bool,
-    offset: usize,
-    render_area: tui::layout::Rect,
 }
 
 impl Default for FSBlock {
@@ -55,8 +52,6 @@ impl Default for FSBlock {
             parent: String::default(),
             content: FileList::default(),
             focused: false,
-            offset: 0usize,
-            render_area: tui::layout::Rect::default(),
         }
     }
 }
@@ -234,11 +229,13 @@ impl FSBlock {
 
         let paths = fs::read_dir(&self.parent)?;
 
-        self.content.push(FileItem {
-            file_type: MetadataType::ReturnType,
-            path: fs_interface::walk_back_path(self.parent.clone())?,
-            ..Default::default()
-        });
+        if self.parent != String::from("/") {
+            self.content.push(FileItem {
+                file_type: MetadataType::ReturnType,
+                path: fs_interface::walk_back_path(self.parent.clone())?,
+                ..Default::default()
+            });
+        };
 
         for path in paths {
             match path {
