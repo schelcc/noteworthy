@@ -9,7 +9,7 @@ pub struct Theme {
 
 lazy_static! {
     pub static ref THEME: Theme = Theme {
-        background: Color::Green,
-        foreground: Color::White,
+        background: Color::Rgb(40, 40, 40),
+        foreground: Color::Rgb(253, 244, 193),
     };
 }
