@@ -12,6 +12,7 @@ crossterm = { version = "0.26.1", features = ["event-stream", "futures-core"] }
 futures = "0.3.28"
 futures-timer = "3.0.2"
 glob = "0.3.1"
+lazy_static = "1.4.0"
 rusqlite = "0.29.0"
 thiserror = "1.0.40"
 tui = "0.19.0"
