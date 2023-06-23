@@ -8,6 +8,8 @@ pub enum Error {
     OutOfBoundsError(usize),
     #[error("[ERR] Internal : Cannot walk back any more")]
     WalkBackError,
+    #[error("[ERR] Internal : Color could not be converted to RGB")]
+    HexToRGBError,
 }
 
 impl From<std::io::Error> for Error {
@@ -21,3 +23,9 @@ impl From<rusqlite::Error> for Error {
         Error::SQLiteError(value.to_string())
     }
 }
+
+// impl Error {
+//     fn to_string(self) -> String {
+//         self.
+//     }
+// }
