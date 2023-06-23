@@ -189,31 +189,3 @@ pub fn resolve_file_tree(db: &Connection) -> Result<(), crate::intern_error::Err
 
     Ok(())
 }
-
-pub fn walk_back_path(path: String) -> Result<String, intern_error::Error> {
-    // the .split() method adds empty strings if the splitting pattern appears at the start or end of the string,
-    // so .filter_map just filters out the empty string
-    let dirs: Vec<&str> = path
-        .split("/")
-        .into_iter()
-        .filter_map(|f| match f {
-            "" => None,
-            _ => Some(f),
-        })
-        .collect();
-
-    // Subtract from the sub directories, returning a WalkBackError if we can't walk back any further
-    match dirs.len().checked_add_signed(-1) {
-        None => Err(intern_error::Error::WalkBackError),
-        Some(val) => {
-            let mut output = String::from("/");
-
-            for item in &dirs[..val] {
-                output.push_str(item);
-                output.push('/');
-            }
-
-            Ok(output)
-        }
-    }
-}

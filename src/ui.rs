@@ -1,12 +1,19 @@
-use std::{cmp::Ordering, fs};
+use std::{
+    cmp::Ordering,
+    fs,
+    ops::BitAnd,
+    os::unix::prelude::PermissionsExt,
+    path::{Components, Path},
+};
 
 use rusqlite::{named_params, Connection};
 
 use tui::{
     backend::Backend,
-    layout::{Constraint, Layout},
+    layout::{Constraint, Layout, Rect},
     style::{Modifier, Style},
-    widgets::{Block, Borders, List, ListItem},
+    text::{Span, Spans},
+    widgets::{Block, BorderType, Borders, Clear, List, ListItem, Paragraph, Wrap},
     Frame,
 };
 
@@ -14,6 +21,7 @@ use crate::{
     config,
     fs_interface::{self, MetadataType},
     intern_error,
+    notification::{NotificationType, NotificationWidget},
 };
 
 #[derive(Default)]
@@ -22,11 +30,11 @@ pub enum Display {
     LocalRemoteSplit,
 }
 
-#[derive(Default)]
+// #[derive(Default)]
 pub struct FileItem {
     uuid: String,
     name: String,
-    path: String,
+    path: Box<Path>,
     file_type: MetadataType,
 }
 
@@ -153,12 +161,9 @@ impl FileList {
                 MetadataType::ReturnType => {
                     style = style.add_modifier(Modifier::BOLD);
                 }
-                MetadataType::ErrorType => {
+                MetadataType::ErrorType | MetadataType::DefaultType => {
                     // Skip error types
                     continue;
-                }
-                MetadataType::DefaultType => {
-                    style = style.add_modifier(Modifier::DIM);
                 }
             }
 
@@ -192,10 +197,9 @@ impl FSBlock {
         let file_iter = stmt.query_map([&self.parent], |r| {
             Ok(FileItem {
                 uuid: r.get(0)?,
-                path: r.get(0)?,
+                path: Path::new(&r.get::<usize, String>(0)?).into(),
                 name: r.get(1)?,
                 file_type: MetadataType::from(r.get::<usize, String>(2)?),
-                ..Default::default()
             })
         })?;
 
@@ -207,9 +211,10 @@ impl FSBlock {
             Err(_) => (),
             Ok(val) => {
                 self.content.push(FileItem {
-                    path: val,
+                    name: val,
+                    path: Path::new(".").into(),
                     file_type: MetadataType::ReturnType,
-                    ..Default::default()
+                    uuid: String::from(""),
                 });
             }
         };
@@ -232,20 +237,35 @@ impl FSBlock {
         if self.parent != String::from("/") {
             self.content.push(FileItem {
                 file_type: MetadataType::ReturnType,
-                path: fs_interface::walk_back_path(self.parent.clone())?,
-                ..Default::default()
+                path: {
+                    let mut path = Path::new(self.parent.as_str()).components();
+
+                    path.next_back();
+
+                    path.as_path().into()
+                },
+                name: String::new(),
+                uuid: String::new(),
             });
-        };
+        }
 
         for path in paths {
             match path {
                 Err(_) => (),
-                Ok(res_path) => self.content.push(FileItem {
-                    name: res_path.file_name().to_str().unwrap().to_string(),
-                    file_type: MetadataType::from(res_path.file_type().unwrap()),
-                    path: res_path.path().display().to_string(),
-                    ..Default::default()
-                }),
+                Ok(res_path) => {
+                    let file_type = MetadataType::from(res_path.file_type().unwrap());
+
+                    if file_type == MetadataType::ErrorType {
+                        continue;
+                    };
+
+                    self.content.push(FileItem {
+                        name: res_path.file_name().to_str().unwrap().to_string(),
+                        file_type: MetadataType::from(res_path.file_type().unwrap()),
+                        path: res_path.path().into(),
+                        uuid: String::new(),
+                    })
+                }
             }
         }
 
@@ -258,7 +278,8 @@ impl FSBlock {
             .block(
                 Block::default()
                     .title(self.name.clone())
-                    .borders(Borders::ALL),
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Double),
             )
             .style(
                 Style::default()
@@ -325,7 +346,7 @@ impl FileUI {
             Some(val) => match val.file_type {
                 MetadataType::CollectionType | MetadataType::ReturnType => {
                     updated = true;
-                    (*val.path).to_string()
+                    (*val.path).display().to_string()
                 }
                 _ => focused_block.parent.clone(),
             },
