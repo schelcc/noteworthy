@@ -1,9 +1,12 @@
 pub mod config;
 pub mod fs_interface;
 pub mod intern_error;
+pub mod notification;
+pub mod remote;
 pub mod ui;
 
 use fs_interface::resolve_file_tree;
+use notification::NotificationWidget;
 use rusqlite::Connection;
 use std::{
     io::{self, Stdout},
