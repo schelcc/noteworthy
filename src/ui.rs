@@ -204,15 +204,15 @@ impl FSBlock {
         })?;
 
         match db.query_row(
-            "SELECT parent FROM objects WHERE uuid=:uuid",
+            "SELECT parent,uuid FROM objects WHERE uuid=:uuid",
             named_params! {":uuid":self.parent},
-            |r| r.get::<usize, String>(0),
+            |r| Ok((r.get::<usize, String>(0), r.get::<usize, String>(1))),
         ) {
             Err(_) => (),
             Ok(val) => {
                 self.content.push(FileItem {
-                    name: val,
-                    path: Path::new(".").into(),
+                    name: val.0?,
+                    path: Path::new(&val.1?).into(),
                     file_type: MetadataType::ReturnType,
                     uuid: String::from(""),
                 });
@@ -346,7 +346,10 @@ impl FileUI {
             Some(val) => match val.file_type {
                 MetadataType::CollectionType | MetadataType::ReturnType => {
                     updated = true;
-                    (*val.path).display().to_string()
+                    match self.focus {
+                        FileUIFocus::Local => (*val.path).display().to_string(),
+                        FileUIFocus::Remote => (*val.uuid).to_string(),
+                    }
                 }
                 _ => focused_block.parent.clone(),
             },

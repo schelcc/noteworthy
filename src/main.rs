@@ -78,7 +78,11 @@ async fn render_base(
     let conclusion: Result<(), crate::intern_error::Error> = Ok(());
 
     // Should be based on config
-    let mut ui = file_ui("/home/schelcc/Documents", "root", &db)?;
+    let mut ui = file_ui(
+        config::SETTINGS["default-local-dir"].as_str(),
+        config::SETTINGS["default-remote-dir"].as_str(),
+        &db,
+    )?;
 
     loop {
         let mut key_event = reader.next().fuse();
