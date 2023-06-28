@@ -6,6 +6,7 @@ pub mod remote;
 pub mod ui;
 
 use fs_interface::resolve_file_tree;
+use lazy_static::lazy_static;
 use notification::NotificationWidget;
 use rusqlite::Connection;
 use std::{
@@ -67,9 +68,9 @@ fn main() -> Result<(), crate::intern_error::Error> {
     Ok(())
 }
 
-async fn render_base(
+async fn render_base<'a>(
     terminal: &mut Terminal<CrosstermBackend<Stdout>>,
-    db: &Connection,
+    db: &'a Connection,
 ) -> Result<(), crate::intern_error::Error> {
     let mut reader = EventStream::new();
 
@@ -78,11 +79,7 @@ async fn render_base(
     let conclusion: Result<(), crate::intern_error::Error> = Ok(());
 
     // Should be based on config
-    let mut ui = file_ui(
-        config::SETTINGS["default-local-dir"].as_str(),
-        config::SETTINGS["default-remote-dir"].as_str(),
-        &db,
-    )?;
+    let mut ui = file_ui(&db)?;
 
     loop {
         let mut key_event = reader.next().fuse();

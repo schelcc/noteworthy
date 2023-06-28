@@ -152,7 +152,7 @@ impl Metadata {
     }
 }
 
-pub fn resolve_file_tree(db: &Connection) -> Result<(), crate::intern_error::Error> {
+pub fn resolve_file_tree(db: &Connection) -> Result<&Connection, crate::intern_error::Error> {
     db.execute(
         "CREATE TABLE objects (
         uuid TEXT,
@@ -187,5 +187,5 @@ pub fn resolve_file_tree(db: &Connection) -> Result<(), crate::intern_error::Err
         }
     };
 
-    Ok(())
+    Ok(db)
 }

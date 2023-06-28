@@ -14,6 +14,8 @@ pub enum Error {
     ConfigparserError(String),
     #[error("[ERR] SSH2 : {0}")]
     SSHError(String),
+    #[error("[ERR] Internal : DB Connection not initialized, cannot populate DBBlock")]
+    NoDBConnectionError,
 }
 
 impl From<std::io::Error> for Error {
