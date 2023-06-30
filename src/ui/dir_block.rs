@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, fs, path::Path};
+use std::{cmp::Ordering, fs, path::Path, sync::Arc};
 
 use tui::{
     layout::Rect,
@@ -19,7 +19,7 @@ pub struct DirBlock {
 }
 
 impl FSListBlock for DirBlock {
-    fn new(title: &'static str) -> Self {
+    fn new(title: &'static str, _: Option<Arc<rusqlite::Connection>>) -> Self {
         DirBlock {
             name: String::from(title),
             parent: Path::new("/home/").into(),
@@ -74,8 +74,10 @@ impl FSListBlock for DirBlock {
     ) -> Result<Vec<ListItem<'static>>, intern_error::Error> {
         let mut result = Vec::new();
 
-        let offset: Option<usize> = match self.cursor_idx.cmp(&render_area.height.into()) {
-            Ordering::Greater => Some(self.cursor_idx - usize::from(render_area.height)),
+        let adj_height = render_area.height - super::WIDGET_OFFSET;
+
+        let offset: Option<usize> = match self.cursor_idx.cmp(&adj_height.into()) {
+            Ordering::Greater => Some(self.cursor_idx - usize::from(adj_height)),
             _ => None,
         };
 
@@ -119,7 +121,7 @@ impl FSListBlock for DirBlock {
         Ok(result)
     }
 
-    fn render(&mut self, render_area: Rect) -> List<'static> {
+    fn render(&mut self, render_area: Rect) -> List {
         if self.focused {
             self.resolve();
         };
@@ -147,8 +149,26 @@ impl FSListBlock for DirBlock {
         };
 
         self.cursor_idx = match self.cursor_idx.checked_add_signed(delta) {
-            Some(val) => val,
+            Some(val) => match val.cmp(&self.content.len()) {
+                Ordering::Less => val,
+                _ => self.cursor_idx,
+            },
             None => self.cursor_idx,
+        };
+    }
+
+    fn expand_selection(&mut self) -> () {
+        let selected_file = match self.content.get(self.cursor_idx) {
+            Some(val) => val,
+            None => return (),
+        };
+
+        match selected_file.file_type {
+            MetadataType::CollectionType | MetadataType::ReturnType => {
+                self.parent = selected_file.path.clone().into();
+                self.cursor_idx = 0;
+            }
+            _ => (),
         };
     }
 }

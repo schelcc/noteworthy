@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, path::Path};
+use std::{cmp::Ordering, path::Path, sync::Arc};
 
 use rusqlite::{named_params, Connection};
 
@@ -12,31 +12,25 @@ use crate::{fs_interface::MetadataType, intern_error};
 
 use super::{super::config, block::FSListBlock, file_item::FileItem, CursorDirection};
 
-pub struct DBBlock<'_a> {
+pub struct DBBlock {
     name: String,
     parent: String,
     cursor_idx: usize,
     pub focused: bool,
     content: Vec<FileItem>,
-    db_connection: Option<&'_a Connection>,
+    db_connection: Option<Arc<Connection>>,
 }
 
-impl DBBlock<'_> {
-    pub fn set_db_connection<'a>(mut self, db: &'a Connection) -> Self {
-        self.db_connection = Some(db);
-        self
-    }
-}
-
-impl FSListBlock for DBBlock<'_> {
-    fn new(title: &'static str) -> Self {
+impl FSListBlock for DBBlock {
+    // Figure out what the fuck I'm trying to do with lifetimes
+    fn new(title: &'static str, db_conn: Option<Arc<Connection>>) -> Self {
         DBBlock {
             name: String::from(title),
             parent: String::from("root"),
             focused: false,
             cursor_idx: 0,
             content: Vec::new(),
-            db_connection: None,
+            db_connection: db_conn,
         }
     }
 
@@ -50,7 +44,7 @@ impl FSListBlock for DBBlock<'_> {
         };
 
         // If we pass the above check we have db, so we can safely create a local reference unwrapped
-        let db = self.db_connection.unwrap();
+        let db = self.db_connection.as_ref().unwrap();
 
         let mut stmt = db.prepare("SELECT uuid, name, object_type FROM objects WHERE parent=?1")?;
 
@@ -64,18 +58,17 @@ impl FSListBlock for DBBlock<'_> {
         })?;
 
         match db.query_row(
-            "SELECT parent,uuid FROM objects WHERE uuid=:uuid",
+            "SELECT parent FROM objects WHERE uuid=:uuid",
             named_params! {":uuid" : self.parent},
             |r| Ok((r.get::<usize, String>(0), r.get::<usize, String>(1))),
         ) {
             Err(_) => (),
             Ok(val) => {
                 self.content.push(FileItem {
-                    // Pretty sure this was all experimental
-                    name: val.0?,
-                    path: Path::new(&val.1?).into(),
+                    name: String::new(),
+                    path: Path::new(".").into(),
                     file_type: MetadataType::ReturnType,
-                    uuid: String::from(""),
+                    uuid: val.0?,
                 });
             }
         };
@@ -140,7 +133,7 @@ impl FSListBlock for DBBlock<'_> {
         Ok(result)
     }
 
-    fn render(&mut self, render_area: Rect) -> List<'static> {
+    fn render(&mut self, render_area: Rect) -> List {
         if self.focused {
             self.resolve();
         };
@@ -148,7 +141,7 @@ impl FSListBlock for DBBlock<'_> {
         List::new(self.generate_list(render_area).unwrap())
             .block(
                 Block::default()
-                    .title(self.name.clone())
+                    .title(self.parent.clone())
                     .borders(Borders::ALL)
                     .border_type(BorderType::Double),
             )
@@ -168,8 +161,26 @@ impl FSListBlock for DBBlock<'_> {
         };
 
         self.cursor_idx = match self.cursor_idx.checked_add_signed(delta) {
-            Some(val) => val,
+            Some(val) => match val.cmp(&self.content.len()) {
+                Ordering::Less => val,
+                _ => self.cursor_idx,
+            },
             None => self.cursor_idx,
+        };
+    }
+
+    fn expand_selection(&mut self) -> () {
+        let selected_file = match self.content.get(self.cursor_idx) {
+            Some(val) => val,
+            None => return (),
+        };
+
+        match selected_file.file_type {
+            MetadataType::CollectionType | MetadataType::ReturnType => {
+                self.parent = selected_file.uuid.clone();
+                self.cursor_idx = 0;
+            }
+            _ => (),
         };
     }
 }

@@ -11,6 +11,7 @@ use notification::NotificationWidget;
 use rusqlite::Connection;
 use std::{
     io::{self, Stdout},
+    sync::Arc,
     time::Duration,
 };
 
@@ -51,7 +52,7 @@ fn main() -> Result<(), crate::intern_error::Error> {
 
     let db = Connection::open_in_memory()?;
 
-    let conclusion = async_std::task::block_on(render_base(&mut terminal, &db));
+    let conclusion = async_std::task::block_on(render_base(&mut terminal, db));
 
     disable_raw_mode()?;
     execute!(
@@ -68,18 +69,20 @@ fn main() -> Result<(), crate::intern_error::Error> {
     Ok(())
 }
 
-async fn render_base<'a>(
+async fn render_base(
     terminal: &mut Terminal<CrosstermBackend<Stdout>>,
-    db: &'a Connection,
+    db: Connection,
 ) -> Result<(), crate::intern_error::Error> {
     let mut reader = EventStream::new();
 
-    resolve_file_tree(&db)?;
+    let arc_db = Arc::new(db);
+
+    resolve_file_tree(Arc::clone(&arc_db))?;
 
     let conclusion: Result<(), crate::intern_error::Error> = Ok(());
 
     // Should be based on config
-    let mut ui = file_ui(&db)?;
+    let mut ui = file_ui(Arc::clone(&arc_db))?;
 
     loop {
         let mut key_event = reader.next().fuse();
@@ -110,7 +113,7 @@ async fn render_base<'a>(
                 let mut render_result : Result<(), intern_error::Error> = Ok(());
 
                 terminal.draw(|f| {
-                    render_result = ui.render(f, &db);
+                    render_result = ui.render(f);
                 })?;
 
                 render_result?;

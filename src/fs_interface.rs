@@ -1,7 +1,7 @@
 use ::glob::{self, glob};
 use glob::GlobError;
 use rusqlite::{self, named_params, types::FromSql, Connection, Result};
-use std::{fs, path::PathBuf};
+use std::{fs, path::PathBuf, sync::Arc};
 
 use crate::intern_error;
 
@@ -152,7 +152,7 @@ impl Metadata {
     }
 }
 
-pub fn resolve_file_tree(db: &Connection) -> Result<&Connection, crate::intern_error::Error> {
+pub fn resolve_file_tree(db: Arc<Connection>) -> Result<(), crate::intern_error::Error> {
     db.execute(
         "CREATE TABLE objects (
         uuid TEXT,
@@ -187,5 +187,5 @@ pub fn resolve_file_tree(db: &Connection) -> Result<&Connection, crate::intern_e
         }
     };
 
-    Ok(db)
+    Ok(())
 }
