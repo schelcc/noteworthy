@@ -6,9 +6,9 @@ use tui::{
     widgets::{List, ListItem},
 };
 
-use crate::intern_error;
+use crate::intern_error::{self, Error};
 
-use super::{file_item::FileItem, CursorDirection};
+use super::CursorDirection;
 
 pub trait FSListBlock {
     fn new(title: &'static str, db_conn: Option<Arc<Connection>>) -> Self
@@ -19,7 +19,7 @@ pub trait FSListBlock {
 
     fn generate_list(&self, render_area: Rect) -> Result<Vec<ListItem>, intern_error::Error>;
 
-    fn render(&mut self, render_area: Rect) -> List;
+    fn render(&mut self, render_area: Rect) -> Result<List, Error>;
 
     fn cursor_move(&mut self, direction: CursorDirection);
 

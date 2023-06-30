@@ -3,7 +3,7 @@ use glob::GlobError;
 use rusqlite::{self, named_params, types::FromSql, Connection, Result};
 use std::{fs, path::PathBuf, sync::Arc};
 
-use crate::intern_error;
+// use crate::intern_error;
 
 #[derive(Debug, Default, PartialEq)]
 pub enum MetadataType {

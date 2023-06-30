@@ -8,7 +8,10 @@ use tui::{
     widgets::{Block, BorderType, Borders, List, ListItem},
 };
 
-use crate::{fs_interface::MetadataType, intern_error};
+use crate::{
+    fs_interface::MetadataType,
+    intern_error::{self, Error},
+};
 
 use super::{super::config, block::FSListBlock, file_item::FileItem, CursorDirection};
 
@@ -133,15 +136,15 @@ impl FSListBlock for DBBlock {
         Ok(result)
     }
 
-    fn render(&mut self, render_area: Rect) -> List {
+    fn render(&mut self, render_area: Rect) -> Result<List, Error> {
         if self.focused {
-            self.resolve();
+            self.resolve()?;
         };
 
-        List::new(self.generate_list(render_area).unwrap())
+        Ok(List::new(self.generate_list(render_area).unwrap())
             .block(
                 Block::default()
-                    .title(self.parent.clone())
+                    .title(self.name.clone())
                     .borders(Borders::ALL)
                     .border_type(BorderType::Double),
             )
@@ -149,7 +152,7 @@ impl FSListBlock for DBBlock {
                 Style::default()
                     .fg(config::THEME.foreground)
                     .bg(config::THEME.background),
-            )
+            ))
     }
 
     fn cursor_move(&mut self, direction: super::CursorDirection) {

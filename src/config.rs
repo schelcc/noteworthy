@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 
-#[macro_use]
+// #[macro_use]
 use lazy_static::lazy_static;
 use tui::style::Color;
 
-use crate::{intern_error, main};
+// use crate::{intern_error, main};
 
 pub struct Theme {
     pub background: Color,

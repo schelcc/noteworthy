@@ -3,32 +3,15 @@ pub mod db_block;
 pub mod dir_block;
 pub mod file_item;
 
-use std::{
-    cmp::Ordering,
-    fs,
-    ops::BitAnd,
-    os::unix::prelude::PermissionsExt,
-    path::{Components, Path},
-    sync::Arc,
-};
-
-use rusqlite::{named_params, Connection};
+use std::sync::Arc;
 
 use tui::{
     backend::Backend,
-    layout::{Constraint, Layout, Rect},
-    style::{Modifier, Style},
-    text::{Span, Spans},
-    widgets::{Block, BorderType, Borders, Clear, List, ListItem, Paragraph, Wrap},
+    layout::{Constraint, Layout},
     Frame,
 };
 
-use crate::{
-    config,
-    fs_interface::{self, MetadataType},
-    intern_error,
-    notification::{NotificationType, NotificationWidget},
-};
+use crate::intern_error;
 
 use self::{block::FSListBlock, db_block::DBBlock, dir_block::DirBlock};
 
@@ -64,8 +47,8 @@ impl FileUI {
         self.local.focused = self.focus == FileUIFocus::Local;
         self.remote.focused = self.focus == FileUIFocus::Remote;
 
-        f.render_widget(self.local.render(layout[0]), layout[0]);
-        f.render_widget(self.remote.render(layout[1]), layout[1]);
+        f.render_widget(self.local.render(layout[0])?, layout[0]);
+        f.render_widget(self.remote.render(layout[1])?, layout[1]);
 
         Ok(())
     }
@@ -98,7 +81,7 @@ impl FileUI {
 }
 
 // Helper function to give a FileUI struct
-pub fn file_ui(db: Arc<Connection>) -> Result<FileUI, crate::intern_error::Error> {
+pub fn file_ui(db: Arc<rusqlite::Connection>) -> Result<FileUI, crate::intern_error::Error> {
     let mut ui = FileUI {
         local: DirBlock::new("dir", None),
         remote: DBBlock::new("db", Some(db)),

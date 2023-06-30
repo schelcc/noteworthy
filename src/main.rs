@@ -6,8 +6,6 @@ pub mod remote;
 pub mod ui;
 
 use fs_interface::resolve_file_tree;
-use lazy_static::lazy_static;
-use notification::NotificationWidget;
 use rusqlite::Connection;
 use std::{
     io::{self, Stdout},
