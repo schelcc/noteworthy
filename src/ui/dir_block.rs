@@ -19,6 +19,7 @@ pub struct DirBlock {
     cursor_idx: usize,
     pub focused: bool,
     content: Vec<FileItem>,
+    last_path: Box<Path>,
 }
 
 impl FSListBlock for DirBlock {
@@ -29,6 +30,7 @@ impl FSListBlock for DirBlock {
             focused: false,
             cursor_idx: 0,
             content: Vec::new(),
+            last_path: Path::new("/home/").into(),
         }
     }
 
@@ -67,6 +69,8 @@ impl FSListBlock for DirBlock {
                 }
             }
         }
+
+        self.last_path = self.parent.clone();
 
         Ok(())
     }
@@ -126,7 +130,13 @@ impl FSListBlock for DirBlock {
 
     fn render(&mut self, render_area: Rect) -> Result<List, Error> {
         if self.focused {
-            self.resolve()?;
+            match self.resolve() {
+                Err(why) => {
+                    self.parent = self.last_path.clone();
+                    return Err(why);
+                }
+                Ok(_) => (),
+            };
         };
 
         Ok(List::new(self.generate_list(render_area).unwrap())

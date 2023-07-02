@@ -6,6 +6,7 @@ pub mod remote;
 pub mod ui;
 
 use fs_interface::resolve_file_tree;
+use intern_error::Error;
 use rusqlite::Connection;
 use std::{
     io::{self, Stdout},
@@ -28,7 +29,10 @@ use crossterm::{
 use futures::{self, select, FutureExt, StreamExt};
 use futures_timer::Delay;
 
-use crate::ui::file_ui;
+use crate::{
+    notification::{NotificationType, NotificationWidget},
+    ui::file_ui,
+};
 
 fn main() -> Result<(), crate::intern_error::Error> {
     // Setup + Initialization
@@ -82,6 +86,8 @@ async fn render_base(
     // Should be based on config
     let mut ui = file_ui(Arc::clone(&arc_db))?;
 
+    let mut notifications: Vec<NotificationWidget> = Vec::new();
+
     loop {
         let mut key_event = reader.next().fuse();
         let mut render_event = Delay::new(Duration::from_secs_f32(0.05)).fuse();
@@ -96,9 +102,10 @@ async fn render_base(
                             KeyCode::Up => {ui.cursor_move(ui::CursorDirection::Up);},
                             KeyCode::Down => {ui.cursor_move(ui::CursorDirection::Down);},
                             KeyCode::Tab => {ui.toggle_focus();},
-                            KeyCode::Enter => {ui.expand_selection()?;},
+                            KeyCode::Enter => {soft_error_recovery(&mut notifications, ui.expand_selection())?;},
                             KeyCode::PageDown => {ui.cursor_move(ui::CursorDirection::PgDn);},
                             KeyCode::PageUp => {ui.cursor_move(ui::CursorDirection::PgUp);},
+                            KeyCode::Char(' ') => {notifications.pop();}
                             _ => ()
                         }
                     },
@@ -112,12 +119,36 @@ async fn render_base(
 
                 terminal.draw(|f| {
                     render_result = ui.render(f);
+                    // NotificationWidget::default().text("Foo").notif_type(NotificationType::ErrorLow).render(f)
+                    match notifications.last() {
+                        Some(notif) => {notif.render(f);},
+                        None => ()
+                    };
                 })?;
 
-                render_result?;
+
+
+                soft_error_recovery(&mut notifications, render_result)?;
             }
         };
     }?;
 
     conclusion
+}
+
+fn soft_error_recovery<T>(
+    notifications: &mut Vec<NotificationWidget>,
+    result: Result<T, Error>,
+) -> Result<Option<T>, Error> {
+    match result {
+        Err(why) => {
+            notifications.push(
+                NotificationWidget::default()
+                    .text(why.to_string().as_str())
+                    .notif_type(NotificationType::ErrorLow),
+            );
+            Ok(None)
+        }
+        Ok(val) => Ok(Some(val)),
+    }
 }

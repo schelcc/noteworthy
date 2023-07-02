@@ -34,6 +34,11 @@ pub struct FileUI {
     focus: FileUIFocus,
 }
 
+enum BlockOption {
+    DirBlock,
+    DBBlock,
+}
+
 const WIDGET_OFFSET: u16 = 3;
 
 impl FileUI {
@@ -74,7 +79,7 @@ impl FileUI {
         match self.focus {
             FileUIFocus::Local => self.local.expand_selection(),
             FileUIFocus::Remote => self.remote.expand_selection(),
-        }
+        };
 
         Ok(())
     }
