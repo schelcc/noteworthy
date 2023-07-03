@@ -161,16 +161,6 @@ impl FSListBlock for DirBlock {
     }
 
     fn render(&mut self, render_area: Rect) -> Result<List, Error> {
-        // if self.focused {
-        //     match self.resolve() {
-        //         Err(why) => {
-        //             self.parent = self.last_path.clone();
-        //             return Err(why);
-        //         }
-        //         Ok(_) => (),
-        //     };
-        // };
-
         Ok(List::new(self.generate_list(render_area).unwrap())
             .block(
                 Block::default()
