@@ -62,6 +62,9 @@ impl FSListBlock for DirBlock {
                 }));
         };
 
+        let mut files: Vec<FileItem> = Vec::new();
+        let mut dirs: Vec<FileItem> = Vec::new();
+
         for path in paths {
             match path {
                 Err(_) => (),
@@ -72,7 +75,21 @@ impl FSListBlock for DirBlock {
                         continue;
                     };
 
-                    self.content.push(
+                    // TODO: Fix error handling
+                    if res_path.file_name().to_str().unwrap().starts_with('.')
+                        && !config::SETTINGS.show_hidden_files
+                    {
+                        continue;
+                    }
+
+                    // Push to dirs or files depending on file type to sort types
+                    let filtered_vec = if file_type == MetadataType::CollectionType {
+                        &mut dirs
+                    } else {
+                        &mut files
+                    };
+
+                    filtered_vec.push(
                         FileItem::new()
                             .name(res_path.file_name().to_str().unwrap())
                             .file_type(MetadataType::from(res_path.file_type().unwrap()))
@@ -81,6 +98,9 @@ impl FSListBlock for DirBlock {
                 }
             }
         }
+
+        dirs.into_iter().for_each(|dir| self.content.push(dir));
+        files.into_iter().for_each(|file| self.content.push(file));
 
         self.last_path = self.parent.clone();
 
@@ -141,15 +161,15 @@ impl FSListBlock for DirBlock {
     }
 
     fn render(&mut self, render_area: Rect) -> Result<List, Error> {
-        if self.focused {
-            match self.resolve() {
-                Err(why) => {
-                    self.parent = self.last_path.clone();
-                    return Err(why);
-                }
-                Ok(_) => (),
-            };
-        };
+        // if self.focused {
+        //     match self.resolve() {
+        //         Err(why) => {
+        //             self.parent = self.last_path.clone();
+        //             return Err(why);
+        //         }
+        //         Ok(_) => (),
+        //     };
+        // };
 
         Ok(List::new(self.generate_list(render_area).unwrap())
             .block(
@@ -182,10 +202,10 @@ impl FSListBlock for DirBlock {
         };
     }
 
-    fn expand_selection(&mut self) -> () {
+    fn expand_selection(&mut self) -> Result<(), Error> {
         let selected_file = match self.content.get(self.cursor_idx) {
             Some(val) => val,
-            None => return (),
+            None => return Err(Error::PlaceholderError),
         };
 
         match selected_file.file_type {
@@ -195,5 +215,14 @@ impl FSListBlock for DirBlock {
             }
             _ => (),
         };
+
+        match self.resolve() {
+            Err(why) => {
+                self.parent = self.last_path.clone();
+                self.resolve()?;
+                Err(why)
+            }
+            Ok(_) => Ok(()),
+        }
     }
 }

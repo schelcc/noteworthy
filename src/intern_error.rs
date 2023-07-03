@@ -12,6 +12,8 @@ You should have received a copy of the GNU General Public License along with Not
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
+    #[error("[!ERR!] ! Placeholder error !")]
+    PlaceholderError,
     #[error("[ERR] Crossterm : {0}")]
     CrosstermError(String),
     #[error("[ERR] SQLite : {0}")]

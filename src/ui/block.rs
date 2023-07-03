@@ -34,5 +34,5 @@ pub trait FSListBlock {
 
     fn cursor_move(&mut self, direction: CursorDirection);
 
-    fn expand_selection(&mut self) -> ();
+    fn expand_selection(&mut self) -> Result<(), Error>;
 }

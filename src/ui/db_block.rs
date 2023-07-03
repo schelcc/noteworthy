@@ -184,10 +184,10 @@ impl FSListBlock for DBBlock {
         };
     }
 
-    fn expand_selection(&mut self) -> () {
+    fn expand_selection(&mut self) -> Result<(), Error> {
         let selected_file = match self.content.get(self.cursor_idx) {
             Some(val) => val,
-            None => return (),
+            None => return Err(Error::PlaceholderError),
         };
 
         match selected_file.file_type {
@@ -197,5 +197,7 @@ impl FSListBlock for DBBlock {
             }
             _ => (),
         };
+
+        Ok(())
     }
 }

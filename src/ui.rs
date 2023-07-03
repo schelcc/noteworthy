@@ -17,6 +17,7 @@ pub mod file_item;
 
 use std::sync::Arc;
 
+use crossterm::event::KeyCode;
 use tui::{
     backend::Backend,
     layout::{Constraint, Layout},
@@ -84,8 +85,34 @@ impl FileUI {
 
     pub fn expand_selection(&mut self) -> Result<(), intern_error::Error> {
         match self.focus {
-            FileUIFocus::Local => self.local.expand_selection(),
-            FileUIFocus::Remote => self.remote.expand_selection(),
+            FileUIFocus::Local => self.local.expand_selection()?,
+            FileUIFocus::Remote => self.remote.expand_selection()?,
+        };
+
+        Ok(())
+    }
+
+    pub fn key_handler(&mut self, keycode: KeyCode) -> Result<(), intern_error::Error> {
+        match keycode {
+            KeyCode::Up => {
+                self.cursor_move(CursorDirection::Up);
+            }
+            KeyCode::Down => {
+                self.cursor_move(CursorDirection::Down);
+            }
+            KeyCode::Tab => {
+                self.toggle_focus();
+            }
+            KeyCode::Enter => {
+                self.expand_selection()?;
+            }
+            KeyCode::PageDown => {
+                self.cursor_move(CursorDirection::PgDn);
+            }
+            KeyCode::PageUp => {
+                self.cursor_move(CursorDirection::PgUp);
+            }
+            _ => (),
         };
 
         Ok(())

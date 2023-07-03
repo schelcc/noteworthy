@@ -62,12 +62,12 @@ fn main() -> Result<(), crate::intern_error::Error> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    terminal.show_cursor()?;
-
     let db = Connection::open_in_memory()?;
 
+    // Main render loop
     let conclusion = async_std::task::block_on(render_base(&mut terminal, db));
 
+    // De-init + Exit
     disable_raw_mode()?;
     execute!(
         terminal.backend_mut(),
@@ -87,18 +87,21 @@ async fn render_base(
     terminal: &mut Terminal<CrosstermBackend<Stdout>>,
     db: Connection,
 ) -> Result<(), crate::intern_error::Error> {
+    // Key event reader
     let mut reader = EventStream::new();
 
+    // Atomic reference counter for db, allowing db to be passed around without
+    // adding complexity via lifetimes
     let arc_db = Arc::new(db);
 
+    // Resolve the current file tree into a db in memory
     resolve_file_tree(Arc::clone(&arc_db))?;
 
-    let conclusion: Result<(), crate::intern_error::Error> = Ok(());
+    let conclusion: Result<(), Error> = Ok(());
 
-    // Should be based on config
-    let mut ui = file_ui(Arc::clone(&arc_db))?;
+    let mut selected_ui = file_ui(Arc::clone(&arc_db))?;
 
-    let mut notifications: Vec<NotificationWidget> = Vec::new();
+    let mut notification_queue: Vec<NotificationWidget> = Vec::new();
 
     loop {
         let mut key_event = reader.next().fuse();
@@ -110,29 +113,26 @@ async fn render_base(
                     // KEY EVENT HANDLING
                     Event::Key(event) =>  {
                         match event.code {
+                            // Global key responses
+                            // TODO: Add flag to disable keyevent handling for text entering
                             KeyCode::Esc | KeyCode::Char('q') => break Ok(()),
-                            KeyCode::Up => {ui.cursor_move(ui::CursorDirection::Up);},
-                            KeyCode::Down => {ui.cursor_move(ui::CursorDirection::Down);},
-                            KeyCode::Tab => {ui.toggle_focus();},
-                            KeyCode::Enter => {soft_error_recovery(&mut notifications, ui.expand_selection())?;},
-                            KeyCode::PageDown => {ui.cursor_move(ui::CursorDirection::PgDn);},
-                            KeyCode::PageUp => {ui.cursor_move(ui::CursorDirection::PgUp);},
-                            KeyCode::Char(' ') => {notifications.pop();}
-                            _ => ()
+                            KeyCode::Char(' ') => {notification_queue.pop();}
+                            // Let selected ui handle any unhandled events
+                            _ => {soft_error_recovery(&mut notification_queue, selected_ui.key_handler(event.code))?;}
                         }
                     },
                     _ => (),
                 },
                 Some(Err(why)) => break Err(why.into()),
-                None => break Err(crate::intern_error::Error::CrosstermError(String::from("None KeyEvent"))),
+                None => break Err(Error::CrosstermError(String::from("None KeyEvent"))),
             },
             _ = render_event => {
                 let mut render_result : Result<(), intern_error::Error> = Ok(());
 
                 terminal.draw(|f| {
-                    render_result = ui.render(f);
-                    // NotificationWidget::default().text("Foo").notif_type(NotificationType::ErrorLow).render(f)
-                    match notifications.last() {
+                    render_result = selected_ui.render(f);
+
+                    match notification_queue.last() {
                         Some(notif) => {notif.render(f);},
                         None => ()
                     };
@@ -140,7 +140,7 @@ async fn render_base(
 
 
 
-                soft_error_recovery(&mut notifications, render_result)?;
+                soft_error_recovery(&mut notification_queue, render_result)?;
             }
         };
     }?;
@@ -148,6 +148,8 @@ async fn render_base(
     conclusion
 }
 
+// TODO: Move to intern_error.rs and somehow have a selection of errors we want to recover
+// from and ones we dont
 fn soft_error_recovery<T>(
     notifications: &mut Vec<NotificationWidget>,
     result: Result<T, Error>,

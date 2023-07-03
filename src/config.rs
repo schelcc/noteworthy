@@ -10,8 +10,6 @@ of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Publ
 You should have received a copy of the GNU General Public License along with Noteworthy. If not, see <https://www.gnu.org/licenses/>.
 */
 
-use std::collections::HashMap;
-
 // #[macro_use]
 use lazy_static::lazy_static;
 use tui::style::Color;
@@ -26,6 +24,15 @@ pub struct Theme {
     pub highlight: Color,
 }
 
+pub struct Settings {
+    pub default_local_dir: String,
+    pub default_remote_dir: String,
+    pub host: String,
+    pub username: String,
+    pub password: String,
+    pub show_hidden_files: bool,
+}
+
 lazy_static! {
     pub static ref THEME: Theme = Theme {
         background: Color::Black,
@@ -34,16 +41,24 @@ lazy_static! {
         alert: Color::Red,
         highlight: Color::Yellow,
     };
-    pub static ref SETTINGS: HashMap<String, String> = {
-        let mut output: HashMap<String, String> = HashMap::new();
+    // pub static ref SETTINGS: HashMap<String, String> = {
+    //     let mut output: HashMap<String, String> = HashMap::new();
 
-        output.insert(String::from("default-local-dir"), String::from("/home/"));
-        output.insert(String::from("default-remote-dir"), String::from("root"));
+    //     output.insert(String::from("default-local-dir"), String::from("/home/"));
+    //     output.insert(String::from("default-remote-dir"), String::from("root"));
 
-        output.insert(String::from("host"), String::from("192.168.2.39:22"));
-        output.insert(String::from("username"), String::from("root"));
-        output.insert(String::from("password"), String::from("vFQqgk7Ngd"));
+    //     output.insert(String::from("host"), String::from("192.168.2.39:22"));
+    //     output.insert(String::from("username"), String::from("root"));
+    //     output.insert(String::from("password"), String::from("vFQqgk7Ngd"));
 
-        output
+    //     output
+    // };
+    pub static ref SETTINGS: Settings = Settings {
+        default_local_dir: String::from("/home/schelcc/"),
+        default_remote_dir: String::from("root"),
+        host: String::from("192.168.2.39:22"),
+        username: String::from("root"),
+        password: String::from("vFQqgk7Ngd"),
+        show_hidden_files: false,
     };
 }
