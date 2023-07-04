@@ -96,9 +96,17 @@ async fn render_base(
 
     let mut notification_queue: Vec<NotificationWidget> = Vec::new();
 
+    let mut render_result: Result<(), Error> = Ok(());
+
+    // Initial render
+    terminal.draw(|f| {
+        render_result = selected_ui.render(f);
+    })?;
+
+    render_result?;
+
     loop {
         let event = crossterm::event::read()?;
-        // let mut render_event = Delay::new(Duration::from_secs_f32(0.05)).fuse();
 
         match event {
             Event::Key(event) => {
