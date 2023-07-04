@@ -110,10 +110,13 @@ async fn render_base(
                         notification_queue.pop();
                     }
                     _ => {
-                        soft_error_recovery(
-                            &mut notification_queue,
-                            selected_ui.key_handler(event.code),
-                        )?;
+                        // Don't handle context-specific keys if a notification has yet to be dismissed
+                        if notification_queue.len() == 0 {
+                            soft_error_recovery(
+                                &mut notification_queue,
+                                selected_ui.key_handler(event.code),
+                            )?;
+                        }
                     }
                 }
             }
