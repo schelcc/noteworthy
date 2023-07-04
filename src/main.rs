@@ -23,23 +23,16 @@ use rusqlite::Connection;
 use std::{
     io::{self, Stdout},
     sync::Arc,
-    time::Duration,
 };
 
 use tui::{self, backend::CrosstermBackend, Terminal};
 
 use crossterm::{
     self, cursor,
-    event::{
-        DisableMouseCapture, EnableMouseCapture, Event, EventStream, KeyCode,
-        PopKeyboardEnhancementFlags,
-    },
+    event::{DisableMouseCapture, EnableMouseCapture, Event, KeyCode, PopKeyboardEnhancementFlags},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-
-use futures::{self, select, FutureExt, StreamExt};
-use futures_timer::Delay;
 
 use crate::{
     notification::{NotificationType, NotificationWidget},
@@ -88,7 +81,7 @@ async fn render_base(
     db: Connection,
 ) -> Result<(), crate::intern_error::Error> {
     // Key event reader
-    let mut reader = EventStream::new();
+    // let mut reader = EventStream::new();
 
     // Atomic reference counter for db, allowing db to be passed around without
     // adding complexity via lifetimes
@@ -104,44 +97,45 @@ async fn render_base(
     let mut notification_queue: Vec<NotificationWidget> = Vec::new();
 
     loop {
-        let mut key_event = reader.next().fuse();
-        let mut render_event = Delay::new(Duration::from_secs_f32(0.05)).fuse();
+        let event = crossterm::event::read()?;
+        // let mut render_event = Delay::new(Duration::from_secs_f32(0.05)).fuse();
 
-        select! {
-            res_event = key_event => match res_event {
-                Some(Ok(event)) => match event {
-                    // KEY EVENT HANDLING
-                    Event::Key(event) =>  {
-                        match event.code {
-                            // Global key responses
-                            // TODO: Add flag to disable keyevent handling for text entering
-                            KeyCode::Esc | KeyCode::Char('q') => break Ok(()),
-                            KeyCode::Char(' ') => {notification_queue.pop();}
-                            // Let selected ui handle any unhandled events
-                            _ => {soft_error_recovery(&mut notification_queue, selected_ui.key_handler(event.code))?;}
-                        }
-                    },
-                    _ => (),
-                },
-                Some(Err(why)) => break Err(why.into()),
-                None => break Err(Error::CrosstermError(String::from("None KeyEvent"))),
-            },
-            _ = render_event => {
-                let mut render_result : Result<(), intern_error::Error> = Ok(());
-
-                terminal.draw(|f| {
-                    render_result = selected_ui.render(f);
-
-                    match notification_queue.last() {
-                        Some(notif) => {notif.render(f);},
-                        None => ()
-                    };
-                })?;
-
-
-
-                soft_error_recovery(&mut notification_queue, render_result)?;
+        match event {
+            Event::Key(event) => {
+                match event.code {
+                    // Global key responses
+                    // TODO: Add flag to disable keyevent handling for text input
+                    KeyCode::Esc | KeyCode::Char('q') => break Ok(()),
+                    KeyCode::Char(' ') => {
+                        notification_queue.pop();
+                    }
+                    _ => {
+                        soft_error_recovery(
+                            &mut notification_queue,
+                            selected_ui.key_handler(event.code),
+                        )?;
+                    }
+                }
             }
+            _ => (),
+        };
+
+        let mut render_result: Result<(), Error> = Ok(());
+
+        terminal.draw(|f| {
+            render_result = selected_ui.render(f);
+
+            match notification_queue.last() {
+                Some(notif) => {
+                    notif.render(f);
+                }
+                None => (),
+            };
+        })?;
+
+        match soft_error_recovery(&mut notification_queue, render_result) {
+            Err(why) => break Err(why),
+            Ok(_) => (),
         };
     }?;
 
