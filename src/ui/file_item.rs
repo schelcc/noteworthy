@@ -23,9 +23,16 @@ pub struct FileItem {
     pub highlighted: bool,
 }
 
+// ** For sorting vecs of file items **
 impl Ord for FileItem {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.file_type.cmp(&other.file_type)
+        let type_ordering = self.file_type.cmp(&other.file_type);
+
+        if type_ordering == std::cmp::Ordering::Equal {
+            self.name.to_lowercase().cmp(&other.name.to_lowercase())
+        } else {
+            type_ordering
+        }
     }
 }
 
