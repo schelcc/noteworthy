@@ -30,6 +30,8 @@ pub enum Error {
     SSHError(String),
     #[error("[ERR] Internal : DB Connection not initialized, cannot populate DBBlock")]
     NoDBConnectionError,
+    #[error("[ERR] Internal : Couldn't access item at index {0}")]
+    VecAccessError(usize),
 }
 
 impl From<std::io::Error> for Error {

@@ -92,6 +92,13 @@ impl FileUI {
         Ok(())
     }
 
+    pub fn highlight_selection(&mut self) -> Result<(), intern_error::Error> {
+        match self.focus {
+            FileUIFocus::Local => self.local.toggle_highlight_selection(),
+            FileUIFocus::Remote => self.remote.toggle_highlight_selection(),
+        }
+    }
+
     pub fn key_handler(&mut self, keycode: KeyCode) -> Result<(), intern_error::Error> {
         match keycode {
             KeyCode::Up => {
@@ -111,6 +118,9 @@ impl FileUI {
             }
             KeyCode::PageUp => {
                 self.cursor_move(CursorDirection::PgUp);
+            }
+            KeyCode::Char('s') => {
+                self.highlight_selection()?;
             }
             _ => (),
         };

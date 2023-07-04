@@ -14,12 +14,34 @@ use std::path::Path;
 
 use crate::fs_interface::MetadataType;
 
+#[derive(Clone)]
 pub struct FileItem {
     pub name: String,
     pub path: Box<Path>,
     pub file_type: MetadataType,
     pub uuid: String,
+    pub highlighted: bool,
 }
+
+impl Ord for FileItem {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.file_type.cmp(&other.file_type)
+    }
+}
+
+impl PartialOrd for FileItem {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for FileItem {
+    fn eq(&self, other: &Self) -> bool {
+        self.path == other.path
+    }
+}
+
+impl Eq for FileItem {}
 
 impl FileItem {
     pub fn new() -> Self {
@@ -28,6 +50,7 @@ impl FileItem {
             path: Path::new("/").into(),
             file_type: MetadataType::DefaultType,
             uuid: String::new(),
+            highlighted: false,
         }
     }
 

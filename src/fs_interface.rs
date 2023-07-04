@@ -17,15 +17,35 @@ use std::{fs, path::PathBuf, sync::Arc};
 
 // use crate::intern_error;
 
-#[derive(Debug, Default, PartialEq)]
+#[derive(Copy, Debug, Default, Clone)]
 pub enum MetadataType {
-    CollectionType,
     ReturnType,
+    CollectionType,
     DocumentType,
     ErrorType,
     #[default]
     DefaultType,
 }
+
+impl Ord for MetadataType {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        (*self as u8).cmp(&(*other as u8))
+    }
+}
+
+impl PartialOrd for MetadataType {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for MetadataType {
+    fn eq(&self, other: &Self) -> bool {
+        (*self as u8).cmp(&(*other as u8)) == std::cmp::Ordering::Equal
+    }
+}
+
+impl Eq for MetadataType {}
 
 impl FromSql for MetadataType {
     fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {

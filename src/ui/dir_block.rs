@@ -32,6 +32,7 @@ pub struct DirBlock {
     pub focused: bool,
     content: Vec<FileItem>,
     last_path: Box<Path>,
+    selected_content: Vec<FileItem>,
 }
 
 impl FSListBlock for DirBlock {
@@ -43,6 +44,7 @@ impl FSListBlock for DirBlock {
             cursor_idx: 0,
             content: Vec::new(),
             last_path: Path::new("/home/").into(),
+            selected_content: Vec::new(),
         }
     }
 
@@ -62,9 +64,6 @@ impl FSListBlock for DirBlock {
                 }));
         };
 
-        let mut files: Vec<FileItem> = Vec::new();
-        let mut dirs: Vec<FileItem> = Vec::new();
-
         for path in paths {
             match path {
                 Err(_) => (),
@@ -82,14 +81,7 @@ impl FSListBlock for DirBlock {
                         continue;
                     }
 
-                    // Push to dirs or files depending on file type to sort types
-                    let filtered_vec = if file_type == MetadataType::CollectionType {
-                        &mut dirs
-                    } else {
-                        &mut files
-                    };
-
-                    filtered_vec.push(
+                    self.content.push(
                         FileItem::new()
                             .name(res_path.file_name().to_str().unwrap())
                             .file_type(MetadataType::from(res_path.file_type().unwrap()))
@@ -99,8 +91,7 @@ impl FSListBlock for DirBlock {
             }
         }
 
-        dirs.into_iter().for_each(|dir| self.content.push(dir));
-        files.into_iter().for_each(|file| self.content.push(file));
+        self.content.sort();
 
         self.last_path = self.parent.clone();
 
@@ -142,6 +133,10 @@ impl FSListBlock for DirBlock {
                 }
                 MetadataType::DocumentType => Style::default().add_modifier(Modifier::ITALIC),
                 MetadataType::DefaultType | MetadataType::ErrorType => Style::default(),
+            };
+
+            if item.highlighted {
+                style = style.fg(config::THEME.highlight)
             };
 
             if item.file_type == MetadataType::CollectionType
@@ -195,7 +190,7 @@ impl FSListBlock for DirBlock {
     fn expand_selection(&mut self) -> Result<(), Error> {
         let selected_file = match self.content.get(self.cursor_idx) {
             Some(val) => val,
-            None => return Err(Error::PlaceholderError),
+            None => return Err(Error::VecAccessError(self.cursor_idx)),
         };
 
         match selected_file.file_type {
@@ -213,6 +208,18 @@ impl FSListBlock for DirBlock {
                 Err(why)
             }
             Ok(_) => Ok(()),
+        }
+    }
+
+    fn toggle_highlight_selection(&mut self) -> Result<(), Error> {
+        match self.content.get_mut(self.cursor_idx) {
+            Some(val) => {
+                val.highlighted = true;
+                self.selected_content
+                    .push(self.content.get(self.cursor_idx).unwrap().clone());
+                Ok(())
+            }
+            None => Err(Error::VecAccessError(self.cursor_idx)),
         }
     }
 }

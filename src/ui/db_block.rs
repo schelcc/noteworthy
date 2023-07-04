@@ -34,6 +34,7 @@ pub struct DBBlock {
     pub focused: bool,
     content: Vec<FileItem>,
     db_connection: Option<Arc<Connection>>,
+    selected_content: Vec<FileItem>,
 }
 
 impl FSListBlock for DBBlock {
@@ -46,6 +47,7 @@ impl FSListBlock for DBBlock {
             cursor_idx: 0,
             content: Vec::new(),
             db_connection: db_conn,
+            selected_content: Vec::new(),
         }
     }
 
@@ -69,6 +71,7 @@ impl FSListBlock for DBBlock {
                 path: Path::new(".").into(), // Maybe make the path field an option in the future
                 name: r.get(1)?,
                 file_type: MetadataType::from(r.get::<usize, String>(2)?),
+                highlighted: false,
             })
         })?;
 
@@ -84,6 +87,7 @@ impl FSListBlock for DBBlock {
                     path: Path::new(".").into(),
                     file_type: MetadataType::ReturnType,
                     uuid: val.0?,
+                    highlighted: false,
                 });
             }
         };
@@ -93,6 +97,8 @@ impl FSListBlock for DBBlock {
                 self.content.push(row);
             }
         }
+
+        self.content.sort();
 
         Ok(())
     }
@@ -130,6 +136,10 @@ impl FSListBlock for DBBlock {
                 }
                 MetadataType::DocumentType => Style::default().add_modifier(Modifier::ITALIC),
                 MetadataType::DefaultType | MetadataType::ErrorType => Style::default(),
+            };
+
+            if item.highlighted {
+                style = style.fg(config::THEME.highlight)
             };
 
             if item.file_type == MetadataType::CollectionType
@@ -187,7 +197,7 @@ impl FSListBlock for DBBlock {
     fn expand_selection(&mut self) -> Result<(), Error> {
         let selected_file = match self.content.get(self.cursor_idx) {
             Some(val) => val,
-            None => return Err(Error::PlaceholderError),
+            None => return Err(Error::VecAccessError(self.cursor_idx)),
         };
 
         match selected_file.file_type {
@@ -199,5 +209,27 @@ impl FSListBlock for DBBlock {
         };
 
         Ok(())
+    }
+
+    fn toggle_highlight_selection(&mut self) -> Result<(), Error> {
+        match self.content.get_mut(self.cursor_idx) {
+            Some(val) => {
+                if !val.highlighted {
+                    val.highlighted = true;
+                    self.selected_content
+                        .push(self.content.get(self.cursor_idx).unwrap().clone());
+                } else {
+                    // val.highlighted = false;
+                    // match self.selected_content.binary_search(val) {
+                    //     Err(_) => (),
+                    //     Ok(idx) => {
+                    //         self.selected_content.remove(idx);
+                    //     }
+                    // }
+                }
+                Ok(())
+            }
+            None => Err(Error::VecAccessError(self.cursor_idx)),
+        }
     }
 }
