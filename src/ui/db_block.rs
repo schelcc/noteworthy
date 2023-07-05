@@ -219,13 +219,13 @@ impl FSListBlock for DBBlock {
                     self.selected_content
                         .push(self.content.get(self.cursor_idx).unwrap().clone());
                 } else {
-                    // val.highlighted = false;
-                    // match self.selected_content.binary_search(val) {
-                    //     Err(_) => (),
-                    //     Ok(idx) => {
-                    //         self.selected_content.remove(idx);
-                    //     }
-                    // }
+                    val.highlighted = false;
+                    match self.selected_content.binary_search(val) {
+                        Err(_) => (),
+                        Ok(idx) => {
+                            self.selected_content.remove(idx);
+                        }
+                    }
                 }
                 Ok(())
             }

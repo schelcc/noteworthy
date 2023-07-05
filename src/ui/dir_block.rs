@@ -214,9 +214,19 @@ impl FSListBlock for DirBlock {
     fn toggle_highlight_selection(&mut self) -> Result<(), Error> {
         match self.content.get_mut(self.cursor_idx) {
             Some(val) => {
-                val.highlighted = true;
-                self.selected_content
-                    .push(self.content.get(self.cursor_idx).unwrap().clone());
+                if !val.highlighted {
+                    val.highlighted = true;
+                    self.selected_content
+                        .push(self.content.get(self.cursor_idx).unwrap().clone());
+                } else {
+                    val.highlighted = false;
+                    match self.selected_content.binary_search(val) {
+                        Err(_) => (),
+                        Ok(idx) => {
+                            self.selected_content.remove(idx);
+                        }
+                    }
+                }
                 Ok(())
             }
             None => Err(Error::VecAccessError(self.cursor_idx)),
