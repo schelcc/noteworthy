@@ -32,6 +32,8 @@ pub enum Error {
     NoDBConnectionError,
     #[error("[ERR] Internal : Couldn't access item at index {0}")]
     VecAccessError(usize),
+    #[error("[ERR] Internal : Couldn't remove selected item at index {0}")]
+    VecRemoveError(usize),
 }
 
 impl From<std::io::Error> for Error {
