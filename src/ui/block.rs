@@ -56,9 +56,8 @@ pub trait FSListBlock {
         self.get_resolved_content().get(self.get_cursor_idx())
     }
 
-    // fn get_nth_item(&mut self)
-
     // Must be implemented on child side due to mutability
+    // Does it??
     fn get_cursor_selection_mut(&mut self) -> Option<&mut FileItem>;
 
     fn add_selected_content(&mut self, new_item: FileItem) {
