@@ -34,6 +34,12 @@ pub trait FSListBlock {
     fn get_focus(&self) -> bool;
     fn get_parent(&self) -> FileItem;
 
+    fn get_offset_pos(&self) -> usize;
+    fn set_offset_pos(&mut self, new_pos: usize);
+
+    fn get_render_area(&self) -> Rect;
+    fn set_render_area(&mut self, area: Rect);
+
     fn get_resolved_content(&self) -> &Vec<FileItem>;
     fn get_resolved_content_mut(&mut self) -> &mut Vec<FileItem>;
 
@@ -74,23 +80,14 @@ pub trait FSListBlock {
 
     fn resolve(&mut self) -> Result<(), intern_error::Error>;
 
-    // fn modify_nth_entry<T>(&mut self, idx: usize, new_value: T) -> ();
-
     fn generate_list(&self, render_area: Rect) -> Result<Vec<ListItem>, intern_error::Error> {
         let mut result: Vec<ListItem> = Vec::new();
 
-        let adj_height = render_area.height - super::WIDGET_OFFSET;
-
-        let offset: Option<usize> = match self.get_cursor_idx().cmp(&render_area.height.into()) {
-            Ordering::Greater => Some(self.get_cursor_idx() - usize::from(adj_height)),
-            _ => None,
-        };
+        let adj_height = usize::from(render_area.height - super::WIDGET_OFFSET);
 
         for (idx, item) in self.get_resolved_content().iter().enumerate() {
-            if let Some(val) = offset {
-                if idx < val || idx > self.get_cursor_idx() {
-                    continue;
-                }
+            if idx < self.get_offset_pos() || idx > self.get_offset_pos() + adj_height {
+                continue;
             }
 
             let mut file_name = match item.file_type {
@@ -128,6 +125,8 @@ pub trait FSListBlock {
     }
 
     fn render(&mut self, render_area: Rect) -> Result<List, Error> {
+        self.set_render_area(render_area);
+
         Ok(List::new(self.generate_list(render_area).unwrap())
             .block(
                 Block::default()
@@ -150,13 +149,27 @@ pub trait FSListBlock {
             CursorDirection::PgUp => -15,
         };
 
-        self.set_cursor_idx(match self.get_cursor_idx().checked_add_signed(delta) {
-            Some(val) => match val.cmp(&self.get_resolved_content().len()) {
-                Ordering::Less => val,
-                _ => self.get_cursor_idx(),
-            },
-            None => self.get_cursor_idx(),
-        });
+        let adj_height = usize::from(self.get_render_area().height - super::WIDGET_OFFSET);
+
+        let new_pos = if let Some(val) = self.get_cursor_idx().checked_add_signed(delta) {
+            if val > self.get_resolved_content().len() - 1 {
+                self.get_resolved_content().len() - 1
+            } else {
+                val
+            }
+        } else {
+            0
+        };
+
+        let (clamp_min, clamp_max) = (self.get_offset_pos(), self.get_offset_pos() + adj_height);
+
+        if new_pos <= clamp_min {
+            self.set_offset_pos(new_pos)
+        } else if new_pos >= clamp_max {
+            self.set_offset_pos(new_pos - adj_height)
+        }
+
+        self.set_cursor_idx(new_pos);
     }
 
     fn expand_selection(&mut self) -> Result<(), Error> {

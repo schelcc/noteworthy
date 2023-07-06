@@ -13,6 +13,7 @@ You should have received a copy of the GNU General Public License along with Not
 use std::{path::Path, sync::Arc};
 
 use rusqlite::{named_params, Connection};
+use tui::layout::Rect;
 
 use crate::{
     fs_interface::MetadataType,
@@ -29,6 +30,8 @@ pub struct DBBlock {
     content: Vec<FileItem>,
     db_connection: Option<Arc<Connection>>,
     selected_content: Vec<FileItem>,
+    offset_pos: usize,
+    render_area: Rect,
 }
 
 impl FSListBlock for DBBlock {
@@ -42,6 +45,8 @@ impl FSListBlock for DBBlock {
             content: Vec::new(),
             db_connection: db_conn,
             selected_content: Vec::new(),
+            offset_pos: 0,
+            render_area: Rect::default(),
         }
     }
 
@@ -51,6 +56,22 @@ impl FSListBlock for DBBlock {
 
     fn get_focus(&self) -> bool {
         self.focused
+    }
+
+    fn get_offset_pos(&self) -> usize {
+        self.offset_pos
+    }
+
+    fn set_offset_pos(&mut self, new_pos: usize) {
+        self.offset_pos = new_pos
+    }
+
+    fn get_render_area(&self) -> Rect {
+        self.render_area
+    }
+
+    fn set_render_area(&mut self, area: Rect) {
+        self.render_area = area
     }
 
     fn get_resolved_content(&self) -> &Vec<FileItem> {

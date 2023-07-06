@@ -12,6 +12,8 @@ You should have received a copy of the GNU General Public License along with Not
 
 use std::{fs, path::Path, sync::Arc};
 
+use tui::layout::Rect;
+
 use crate::{
     fs_interface::MetadataType,
     intern_error::{self},
@@ -27,6 +29,8 @@ pub struct DirBlock {
     content: Vec<FileItem>,
     last_path: Box<Path>,
     selected_content: Vec<FileItem>,
+    offset_pos: usize,
+    render_area: Rect,
 }
 
 impl FSListBlock for DirBlock {
@@ -39,6 +43,8 @@ impl FSListBlock for DirBlock {
             content: Vec::new(),
             last_path: Path::new("/home/").into(),
             selected_content: Vec::new(),
+            offset_pos: 0,
+            render_area: Rect::default(),
         }
     }
 
@@ -52,6 +58,22 @@ impl FSListBlock for DirBlock {
 
     fn get_parent(&self) -> FileItem {
         FileItem::new().path(self.parent.clone())
+    }
+
+    fn get_offset_pos(&self) -> usize {
+        self.offset_pos
+    }
+
+    fn set_offset_pos(&mut self, new_pos: usize) {
+        self.offset_pos = new_pos
+    }
+
+    fn get_render_area(&self) -> Rect {
+        self.render_area
+    }
+
+    fn set_render_area(&mut self, area: Rect) {
+        self.render_area = area
     }
 
     fn get_resolved_content(&self) -> &Vec<FileItem> {
