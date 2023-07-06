@@ -66,13 +66,13 @@ impl FSListBlock for DirBlock {
         self.cursor_idx
     }
 
-    fn set_cursor_idx(&mut self, new_idx: usize) -> () {
+    fn set_cursor_idx(&mut self, new_idx: usize) {
         self.cursor_idx = new_idx
     }
 
     // Probably doesn't need to be a result
     fn set_parent(&mut self, new_parent_file: FileItem) -> Result<(), intern_error::Error> {
-        self.parent = new_parent_file.clone().path;
+        self.parent = new_parent_file.path;
         Ok(())
     }
 
@@ -84,7 +84,7 @@ impl FSListBlock for DirBlock {
         &mut self.selected_content
     }
 
-    fn clear_selected_content(&mut self) -> () {
+    fn clear_selected_content(&mut self) {
         self.selected_content = Vec::new();
     }
 

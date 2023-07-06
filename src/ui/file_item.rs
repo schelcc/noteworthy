@@ -50,6 +50,18 @@ impl PartialEq for FileItem {
 
 impl Eq for FileItem {}
 
+impl Default for FileItem {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            path: Path::new("/").into(),
+            file_type: MetadataType::DefaultType,
+            uuid: String::new(),
+            highlighted: false,
+        }
+    }
+}
+
 impl FileItem {
     pub fn new() -> Self {
         Self {

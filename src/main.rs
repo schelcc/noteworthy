@@ -119,7 +119,7 @@ async fn render_base(
                     }
                     _ => {
                         // Don't handle context-specific keys if a notification has yet to be dismissed
-                        if notification_queue.len() == 0 {
+                        if notification_queue.is_empty() {
                             soft_error_recovery(
                                 &mut notification_queue,
                                 selected_ui.key_handler(event.code),
@@ -128,6 +128,8 @@ async fn render_base(
                     }
                 }
             }
+            // Don't want to re render on every mouse event
+            Event::Mouse(_) => continue,
             _ => (),
         };
 
@@ -136,17 +138,13 @@ async fn render_base(
         terminal.draw(|f| {
             render_result = selected_ui.render(f);
 
-            match notification_queue.last() {
-                Some(notif) => {
-                    notif.render(f);
-                }
-                None => (),
-            };
+            if let Some(notif) = notification_queue.last() {
+                notif.render(f);
+            }
         })?;
 
-        match soft_error_recovery(&mut notification_queue, render_result) {
-            Err(why) => break Err(why),
-            Ok(_) => (),
+        if let Err(why) = soft_error_recovery(&mut notification_queue, render_result) {
+            break Err(why);
         };
     }?;
 

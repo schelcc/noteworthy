@@ -39,10 +39,10 @@ pub trait FSListBlock {
 
     fn get_selected_content(&self) -> &Vec<FileItem>;
     fn get_selected_content_mut(&mut self) -> &mut Vec<FileItem>;
-    fn clear_selected_content(&mut self) -> ();
+    fn clear_selected_content(&mut self);
 
     fn get_cursor_idx(&self) -> usize;
-    fn set_cursor_idx(&mut self, new_idx: usize) -> ();
+    fn set_cursor_idx(&mut self, new_idx: usize);
 
     fn set_parent(&mut self, new_parent: FileItem) -> Result<(), intern_error::Error>;
 
@@ -55,8 +55,8 @@ pub trait FSListBlock {
     // Must be implemented on child side due to mutability
     fn get_cursor_selection_mut(&mut self) -> Option<&mut FileItem>;
 
-    fn add_selected_content(&mut self, new_item: FileItem) -> () {
-        self.get_selected_content_mut().push(new_item.clone());
+    fn add_selected_content(&mut self, new_item: FileItem) {
+        self.get_selected_content_mut().push(new_item);
     }
 
     fn remove_selected_content(
@@ -87,14 +87,11 @@ pub trait FSListBlock {
         };
 
         for (idx, item) in self.get_resolved_content().iter().enumerate() {
-            match offset {
-                Some(val) => {
-                    if idx < val || idx > self.get_cursor_idx() {
-                        continue;
-                    }
+            if let Some(val) = offset {
+                if idx < val || idx > self.get_cursor_idx() {
+                    continue;
                 }
-                None => (),
-            };
+            }
 
             let mut file_name = match item.file_type {
                 MetadataType::CollectionType => String::from("/"),

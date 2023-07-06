@@ -65,7 +65,7 @@ impl FSListBlock for DBBlock {
         self.cursor_idx
     }
 
-    fn set_cursor_idx(&mut self, new_idx: usize) -> () {
+    fn set_cursor_idx(&mut self, new_idx: usize) {
         self.cursor_idx = new_idx
     }
 
@@ -75,7 +75,7 @@ impl FSListBlock for DBBlock {
 
     // Probably doesn't need to be a result
     fn set_parent(&mut self, new_parent_file: FileItem) -> Result<(), intern_error::Error> {
-        self.parent = new_parent_file.clone().uuid;
+        self.parent = new_parent_file.uuid;
         Ok(())
     }
 
@@ -87,7 +87,7 @@ impl FSListBlock for DBBlock {
         &mut self.selected_content
     }
 
-    fn clear_selected_content(&mut self) -> () {
+    fn clear_selected_content(&mut self) {
         self.selected_content = Vec::new();
     }
 
@@ -136,10 +136,8 @@ impl FSListBlock for DBBlock {
             }
         };
 
-        for row in file_iter {
-            if let Ok(row) = row {
-                self.content.push(row);
-            }
+        for row in file_iter.flatten() {
+            self.content.push(row);
         }
 
         self.content.sort();
