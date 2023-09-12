@@ -199,6 +199,12 @@ pub trait FSListBlock {
         }
     }
 
+    fn refresh_view(&mut self) -> Result<(), Error> {
+        self.resolve()?;
+
+        Ok(())
+    }
+
     fn toggle_highlight_selection(&mut self) -> Result<(), Error> {
         let current_selection = { self.get_cursor_selection().unwrap().clone() };
         // let idx = { self.get_cursor_idx() };

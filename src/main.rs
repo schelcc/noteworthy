@@ -14,10 +14,9 @@ pub mod config;
 pub mod fs_interface;
 pub mod intern_error;
 pub mod notification;
-pub mod remote;
 pub mod ui;
 
-use fs_interface::resolve_file_tree;
+use fs_interface::{resolve_file_tree, sync_remote_to_local};
 use intern_error::Error;
 use rusqlite::Connection;
 use std::{
@@ -117,8 +116,14 @@ async fn render_base(
                     KeyCode::Char(' ') => {
                         notification_queue.pop();
                     }
+                    KeyCode::Char('S') => {
+                        soft_error_recovery(&mut notification_queue, sync_remote_to_local())?;
+                        resolve_file_tree(Arc::clone(&arc_db))?;
+                        selected_ui.refresh_views()?;
+                    }
                     _ => {
                         // Don't handle context-specific keys if a notification has yet to be dismissed
+                        // TODO: Move this outside key loop so that all events are blocked except for acknowledgement
                         if notification_queue.is_empty() {
                             soft_error_recovery(
                                 &mut notification_queue,

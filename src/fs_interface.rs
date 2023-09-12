@@ -15,6 +15,8 @@ use glob::GlobError;
 use rusqlite::{self, named_params, types::FromSql, Connection, Result};
 use std::{fs, path::PathBuf, sync::Arc};
 
+use crate::{config, intern_error};
+
 // use crate::intern_error;
 
 #[derive(Copy, Debug, Default, Clone)]
@@ -175,6 +177,8 @@ impl Metadata {
 }
 
 pub fn resolve_file_tree(db: Arc<Connection>) -> Result<(), crate::intern_error::Error> {
+    let _ = db.execute("DROP TABLE objects", ());
+
     db.execute(
         "CREATE TABLE objects (
         uuid TEXT,
@@ -208,6 +212,22 @@ pub fn resolve_file_tree(db: Arc<Connection>) -> Result<(), crate::intern_error:
                 .for_each(drop);
         }
     };
+
+    Ok(())
+}
+
+pub fn sync_remote_to_local() -> Result<(), crate::intern_error::Error> {
+    // Shell out and use rsync
+    let cmd = format!(
+        "rsync -a remarkable-wired:{} {}",
+        config::SETTINGS.remote_backup_loc,
+        config::SETTINGS.backup_loc
+    );
+
+    std::process::Command::new("sh")
+        .arg("-c")
+        .arg(cmd)
+        .output()?;
 
     Ok(())
 }

@@ -10,6 +10,8 @@ of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Publ
 You should have received a copy of the GNU General Public License along with Noteworthy. If not, see <https://www.gnu.org/licenses/>.
 */
 
+use glob::PatternError;
+
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("[!ERR!] ! Placeholder error !")]
@@ -34,6 +36,10 @@ pub enum Error {
     VecAccessError(usize),
     #[error("[ERR] Internal : Couldn't remove selected item at index {0}")]
     VecRemoveError(usize),
+    #[error("[ERR] Internal : Glob error")]
+    GlobErr,
+    #[error("[ERR] Internal : Save data read failure")]
+    JSONParseErr,
 }
 
 impl From<std::io::Error> for Error {
@@ -51,6 +57,18 @@ impl From<rusqlite::Error> for Error {
 impl From<ssh2::Error> for Error {
     fn from(value: ssh2::Error) -> Self {
         Error::SSHError(value.to_string())
+    }
+}
+
+impl From<PatternError> for Error {
+    fn from(_value: PatternError) -> Self {
+        Self::GlobErr
+    }
+}
+
+impl From<serde_json::Error> for Error {
+    fn from(value: serde_json::Error) -> Self {
+        Self::JSONParseErr
     }
 }
 

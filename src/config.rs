@@ -10,6 +10,8 @@ of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Publ
 You should have received a copy of the GNU General Public License along with Noteworthy. If not, see <https://www.gnu.org/licenses/>.
 */
 
+use std::path::Path;
+
 // #[macro_use]
 use lazy_static::lazy_static;
 use tui::style::Color;
@@ -27,10 +29,10 @@ pub struct Theme {
 pub struct Settings {
     pub default_local_dir: String,
     pub default_remote_dir: String,
-    pub host: String,
-    pub username: String,
-    pub password: String,
     pub show_hidden_files: bool,
+    pub save_data_loc: Box<Path>,
+    pub backup_loc: String,
+    pub remote_backup_loc: String,
 }
 
 lazy_static! {
@@ -56,9 +58,9 @@ lazy_static! {
     pub static ref SETTINGS: Settings = Settings {
         default_local_dir: String::from("/home/schelcc/"),
         default_remote_dir: String::from("root"),
-        host: String::from("192.168.2.39:22"),
-        username: String::from("root"),
-        password: String::from("vFQqgk7Ngd"),
         show_hidden_files: false,
+        save_data_loc: Path::new("/home/schelcc/projects/noteworthy/save.json").into(),
+        backup_loc: String::from("/home/schelcc/projects/noteworthy/raw-files"),
+        remote_backup_loc: String::from("/home/root/.local/share/remarkable/xochitl/"),
     };
 }

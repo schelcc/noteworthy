@@ -99,6 +99,13 @@ impl FileUI {
         }
     }
 
+    pub fn refresh_views(&mut self) -> Result<(), intern_error::Error> {
+        self.local.refresh_view()?;
+        self.remote.refresh_view()?;
+
+        Ok(())
+    }
+
     pub fn key_handler(&mut self, keycode: KeyCode) -> Result<(), intern_error::Error> {
         match keycode {
             KeyCode::Up => {
